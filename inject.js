@@ -1,14 +1,11 @@
-// This script runs in the page's main world (via extension injection)
-// It overrides geolocation, success, capturePhoto, etc.
 
-// Helper to get custom values from localStorage (set by UI panel)
 function getCustomLat() { return localStorage.getItem('smart_lat') || '19.0760'; }
 function getCustomLon() { return localStorage.getItem('smart_lon') || '72.8777'; }
 function getCustomAddr() { return localStorage.getItem('smart_addr') || 'Mumbai Custom'; }
 function getCustomRemark() { return localStorage.getItem('smart_remark') || ''; }
 function getCustomImage() { return localStorage.getItem('smart_image') || null; }
 
-// 1. Override geolocation
+
 if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition = function(success, error, options) {
         const lat = parseFloat(getCustomLat());
@@ -32,7 +29,7 @@ if (navigator.geolocation) {
     };
 }
 
-// 2. Override the page's 'success' function (which processes GPS result)
+
 window.originalSuccess = window.success;
 window.success = function(p) {
     console.log('[Inject] Intercepted success function');
@@ -48,11 +45,11 @@ window.success = function(p) {
     if (hdnCity) hdnCity.value = fakeAddr;
     const lblHeader = document.getElementById('ctl00_BodyContentPlaceHolder_lblHeader');
     if (lblHeader) lblHeader.innerText = fakeAddr;
-    // Also call locationIQ/Google functions if needed (skip network calls, just set address)
+    
     const keyOwner = document.getElementById('ctl00_BodyContentPlaceHolder_hdnKeyOwner');
     if (keyOwner && keyOwner.value === 'LocationIQ') {
         if (typeof window.getAddressByLocationIQ === 'function') {
-            // Replace original with our fake address setter
+          
             window.getAddressByLocationIQ = function(X,Y) {
                 document.getElementById('ctl00_BodyContentPlaceHolder_hdnCity').value = fakeAddr;
                 document.getElementById('ctl00_BodyContentPlaceHolder_lblHeader').innerHTML = fakeAddr;
@@ -60,11 +57,11 @@ window.success = function(p) {
             window.getAddressByLocationIQ(fakeLon, fakeLat);
         }
     } else if (keyOwner && keyOwner.value === 'Google') {
-        // similar override
+       
     }
 };
 
-// 3. Override getAddressByLocationIQ to directly set fake address
+
 window.getAddressByLocationIQ = function(X,Y) {
     const fakeAddr = getCustomAddr();
     const hdnCity = document.getElementById('ctl00_BodyContentPlaceHolder_hdnCity');
@@ -74,7 +71,7 @@ window.getAddressByLocationIQ = function(X,Y) {
     console.log('[Inject] Fake address set:', fakeAddr);
 };
 
-// 4. Override capturePhoto
+
 window.originalCapturePhoto = window.capturePhoto;
 window.capturePhoto = function() {
     const customImg = getCustomImage();
@@ -86,7 +83,7 @@ window.capturePhoto = function() {
     return null;
 };
 
-// 5. Override take_snapshot
+
 window.originalTakeSnapshot = window.take_snapshot;
 window.take_snapshot = function() {
     const customImg = getCustomImage();
@@ -106,7 +103,7 @@ window.take_snapshot = function() {
     return false;
 };
 
-// 6. Intercept form submit to enforce hidden fields
+
 const originalSubmit = HTMLFormElement.prototype.submit;
 HTMLFormElement.prototype.submit = function() {
     if (this.id === 'aspnetForm') {
