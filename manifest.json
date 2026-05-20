@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Spine HR Override",
+  "version": "1.0",
+  "description": "Override location and time for Spine HR Mobile attendance",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://ciprognosys.coreintegra.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Spine HR Override"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://ciprognosys.coreintegra.com/psmobile/myloc.aspx*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
