@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Smart Attendance Helper",
+  "version": "5.0",
+  "description": "Override location, camera, remark for psmobile",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://ciprognosys.coreintegra.com/psmobile/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://ciprognosys.coreintegra.com/psmobile/*"],
+      "js": ["content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["https://ciprognosys.coreintegra.com/*"]
+    }
+  ]
+}
