@@ -1,6 +1,4 @@
-// Content script (isolated world) – injects inject.js into page main world and creates UI panel
 
-// Inject the external script file into page (bypasses CSP because it's a separate file)
 const script = document.createElement('script');
 script.src = chrome.runtime.getURL('inject.js');
 script.onload = function() {
@@ -8,7 +6,7 @@ script.onload = function() {
 };
 (document.head || document.documentElement).appendChild(script);
 
-// Create UI Panel (to set custom values in localStorage)
+
 function createUI() {
     if (document.getElementById('smart-att-panel')) return;
 
@@ -40,7 +38,7 @@ function createUI() {
         panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     };
 
-    // Load existing values from localStorage
+   
     document.getElementById('smart-lat').value = localStorage.getItem('smart_lat') || '19.0760';
     document.getElementById('smart-lon').value = localStorage.getItem('smart_lon') || '72.8777';
     document.getElementById('smart-addr').value = localStorage.getItem('smart_addr') || 'Mumbai, India';
@@ -70,7 +68,7 @@ function createUI() {
     });
 }
 
-// Wait for DOM to be ready to build UI
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', createUI);
 } else {
