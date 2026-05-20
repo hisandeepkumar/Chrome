@@ -1,0 +1,1604 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head> <script src='navbar_files/jquery-1.8.3.min.js' type='text/javascript'></script>  <script src='navbar_files/SpineLapp.js' type='text/javascript'></script>  <script src='https://tiles.locationiq.com/v3/libs/maplibre-gl/1.15.2/maplibre-gl.js'></script>  <link href='https://tiles.locationiq.com/v3/libs/maplibre-gl/1.15.2/maplibre-gl.css' rel='stylesheet' />  <script src='https://tiles.locationiq.com/v3/js/liq-styles-ctrl-libre-gl.js?v=0.1.8'></script>  <link href='https://tiles.locationiq.com/v3/css/liq-styles-ctrl-libre-gl.css?v=0.1.8' rel='stylesheet' /> <meta name="google" content="notranslate" /><meta http-equiv="Content-Language" content="en" /><title>
+	Spine HR Mobile 6.0.9
+</title><link rel="Shortcut Icon" href="Images/Spinepay3.ico" /><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" /><link href="navbar_files/all.min.css?v=7.0" rel="stylesheet" type="text/css" /><link href="navbar_files/bootstrap.min.css?v=5.0" rel="stylesheet" type="text/css" /><link href="navbar_files/HomePage.css?v=5.0" rel="stylesheet" /><link href="App_Themes/SpineMobiV501/jquery-ui.css?v=5.0" rel="stylesheet" type="text/css" /><link rel="stylesheet" type="text/css" href="navbar_files/style.css?v=5.0" /><link href="navbar_files/common.css?v=7.5" rel="stylesheet" type="text/css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+    
+    
+    
+    
+    <script src="navbar_files/jquery-ui.js?v=5.0" type="text/javascript"></script>
+    <script src="navbar_files/jquery.maxlength.js?v=5.0" type="text/javascript"></script>
+
+    <link href="navbar_files/fonts/fontawesome-free-5.7.1-web/css/all.min.css?v=7.0" rel="stylesheet" />
+    <link href="navbar_files/fonts/fontawesome-free-5.7.1-web/css/fontawesome.min.css?v=5.0" rel="stylesheet" />
+
+    
+    
+
+    <link href="navbar_files/select2.min.css?v=5.0" rel="stylesheet" />
+    <script src="navbar_files/select2.full.min.js?v=5.0" type="text/javascript"></script>
+    <link href="navbar_files/AttendanceCap.css?v=5.0" rel="stylesheet" />
+    
+    <script language="javascript" type="text/javascript">
+
+        $(document).ready(function () {
+            //$(".rdZone").bootstrapSwitch();
+
+            $(".rdZone :radio").each(function () {
+                if ($(this).is(':checked')) {
+                    $(this).parent().addClass("active");
+                }
+            });
+
+            if ($('#' + parntId + "hdnIsMapView").val() == "1") {
+
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(success);
+                }
+                else {
+                    document.getElementById(parntId + 'hdnLog').value = '';
+                    document.getElementById(parntId + 'hdnLat').value = '';
+                    document.getElementById(parntId + 'hdnCity').value = '';
+                }
+            }
+            //added by Parth on 02/10/2019 ref task id 997 spine pms
+            if (document.getElementById(parntId + 'hdnMacTimeEnabled').value == "Y") {
+                try {
+                    displayTime();
+                } catch (e) {
+                    console.log(e);
+                }
+
+                // Added by Parth on 04/03/2021 ref task id 604 spine pms
+                setInterval(displayTime, 1000);
+            }
+        });
+        //added by Parth on 02/10/2019 ref task id 997 spine pms
+        function displayTime() {
+            //Get the  DateObject
+            var localTime = new Date();
+            //Get the Year part from datetime
+            var year = localTime.getFullYear();
+            //Get the Month part from datetime
+            var month = localTime.getMonth() + 1;
+            //Get the Date part from datetime
+            var date = localTime.getDate();
+            //Get the hours part from datetime
+            var hours = localTime.getHours() > 12 ? localTime.getHours() - 12 : localTime.getHours();
+            //Get the minutes part from datetime
+            var minutes = localTime.getMinutes() < 10 ? "0" + localTime.getMinutes() : localTime.getMinutes();
+            //Get the seconds part from datetime
+            var seconds = localTime.getSeconds() < 10 ? "0" + localTime.getSeconds() : localTime.getSeconds();
+            //Get the reference of div to display the date time
+
+            //Set AM PM Time interval 
+            var timeOfDay = localTime.getHours() >= 12 ? "PM" : "AM";
+
+            //Set 12 Hours format instead of 24hrs format
+            hours = hours < 10 ? "0" + hours : hours;
+            //hours = (hours == 0) ? 12 : hours;
+
+            var lblTimeNew = document.getElementById(parntId + 'lblMacDateTime');
+            var lblTimeNew1 = document.getElementById(parntId + 'lblMacDateTime1');
+
+            //Concatenate the values and assign it to div
+            //document.getElementById(parntId + 'hdnMacdatetime').value = year + "-" + month + "-" + date + " " + hours + ":" + minutes + ":" + seconds;
+            document.getElementById(parntId + 'hdnMacdatetime').value = year + "-" + month + "-" + date + " " + hours + ":" + minutes + ":" + seconds + " " + timeOfDay;
+            if (lblTimeNew != null) {
+                lblTimeNew.innerHTML = hours + ":" + minutes + ":" + seconds + " " + timeOfDay;
+            }
+            if (lblTimeNew1 != null) {
+                lblTimeNew1.innerHTML = "You are in (UTC " + createOffset(localTime) + ") time zone ";
+            }
+        }
+
+
+        function CheckTimeDiff() {
+
+        }
+
+        function createOffset(date) {
+            var sign = (date.getTimezoneOffset() > 0) ? "-" : "+";
+            var offset = Math.abs(date.getTimezoneOffset());
+            var hours = pad(Math.floor(offset / 60));
+            var minutes = pad(offset % 60);
+            return sign + hours + ":" + minutes;
+        }
+
+
+        function pad(value) {
+            return value < 10 ? '0' + value : value;
+        }
+
+        function getUniversalTime(Lat, Log) {
+            //$.ajax({
+            //    url: "https://maps.googleapis.com/maps/api/timezone/json?location=6.123123,106.213144&timestamp="
+            //        + (Math.round((new Date().getTime()) / 1000)).toString()+"&key=AIzaSyBf6Dfk_zaNOZ5JiInapBkDPlBIt2FLv90",//",AIzaSyAVCvkx8dqyx4q89rb3ZoerZYoLvrIhem0
+            //}).done(function (response) {
+            //    if (response.data.timeZoneId != null) {
+            //        if (response.timeZoneId != null) {
+            //            {
+            //                var hour = (response.rawOffset) / 60;
+            //                console.log(hour);
+            //            }
+            //        }
+            //    }
+            //});
+        }
+
+        // Changed By Hitesh On 21/02/2022 For PMS Task ID : 2204
+        function success(p) {
+            //alert('Test 1');
+            try {
+                document.getElementById(parntId + 'hdnLog').value = p.coords.longitude;
+                document.getElementById(parntId + 'hdnLat').value = p.coords.latitude;
+                document.getElementById(parntId + 'hdnCity').value = p.coords.locality;
+                //alert(document.getElementById(parntId + 'hdnKeyOwner').value);
+                if (document.getElementById(parntId + 'hdnKeyOwner').value == "Google") {
+                    initMap();
+                    getUniversalTime();
+                    var latlang = new google.maps.LatLng(p.coords.latitude, p.coords.longitude);
+                    var geocoder = new google.maps.Geocoder();
+                    geocoder.geocode(
+                        { 'latLng': latlang },
+
+                        function (result, status) {
+                            if (status == google.maps.GeocoderStatus.OK) {
+                                if (result[1]) {
+                                    document.getElementById(parntId + 'hdnCity').value = result[0].formatted_address;
+                                    if (document.getElementById(parntId + 'lblHeader') != null) {
+                                        document.getElementById(parntId + 'lblHeader').innerHTML = document.getElementById(parntId + 'hdnCity').value;
+                                    }
+                                }
+                            }
+                            else {
+                                //alert('status : ' + status + ' Msg : ' + result);
+                                document.getElementById(parntId + "lblMsgErrClock").innerHTML = 'status : ' + status + ' Msg : ' + result;
+                            }
+                        }
+
+                    );
+                }
+                else if (document.getElementById(parntId + 'hdnKeyOwner').value == "ArcGIS") {
+                    //else {
+                    //alert('To getAddress');
+                    getAddress(p.coords.longitude, p.coords.latitude);
+                }
+                else if (document.getElementById(parntId + 'hdnKeyOwner').value == "LocationIQ") {
+                    //else {
+                    //alert('To getAddressByLocationIQ');
+                    initMapForLocationIQ();
+                    getAddressByLocationIQ(p.coords.longitude, p.coords.latitude);
+                   
+                }
+                else {
+                     document.getElementById(parntId + "lblMsgErrClock").innerHTML = "Geo-location Key Not Defined."
+                }
+            }
+            catch (ex) {
+                document.getElementById(parntId + "lblMsgErrClock").innerHTML = JSON.stringify(ex);
+            }
+        }
+
+        function getAddress(X, Y) {
+            //alert('In getAddress');
+            var aKey = document.getElementById(parntId + 'hdnKey').value;
+            let result = aKey.includes("?");
+            var aURL = "";
+            if (result == true) {
+                aURL = aKey + "&f=json&featureTypes=PointAddress&location=" + X + "," + Y + "";
+            }
+            else {
+                aURL = aKey + "?f=json&featureTypes=PointAddress&location=" + X + "," + Y + "";
+            }
+            //alert('aURL = ' + aURL);
+            //alert('aKeyURL = ' + aKey + "?f=json&featureTypes=PointAddress&location="+ X +","+ Y + "");
+            $.ajax({
+                    type: 'GET',
+                    url: aURL, 
+                    dataType: 'json'
+                }).done(function (result) {
+
+                    //alert("result : " + result);
+                    //alert(JSON.stringify(result));
+                    const obj = JSON.parse(JSON.stringify(result));
+                    //alert(obj);
+                    //alert(obj.address.Match_addr);
+                    document.getElementById(parntId + 'hdnCity').value= obj.address.Match_addr;
+                    document.getElementById(parntId + 'lblHeader').innerHTML = obj.address.Match_addr;
+
+                }).fail(function (result) {
+
+                }).always(function (result) {
+
+                });
+        }
+
+        function getAddressByLocationIQ(X, Y) {
+            //alert('In getAddressByLocationIQ');
+            var aLocKey = document.getElementById(parntId + 'hdnKey').value;
+            var aKey = "https://us1.locationiq.com/v1/reverse?key=" + aLocKey;
+            let result = aKey.includes("?");
+            var aURL = "";
+            if (result == true) {
+                aURL = aKey + "&lat=" + Y + "&lon=" + X + "&format=json";
+            }
+            else {
+                aURL = aKey + "?lat=" + Y + "&lon=" + X + "&format=json";
+            }
+            //alert('aURL = ' + aURL);
+            //alert('aKeyURL = ' + aKey + "?f=json&featureTypes=PointAddress&location="+ X +","+ Y + "");
+            $.ajax({
+                    type: 'GET',
+                    url: aURL, 
+                    dataType: 'json'
+                }).done(function (result) {
+
+                    //alert("result : " + result);
+                    //alert(JSON.stringify(result));
+                    const obj = JSON.parse(JSON.stringify(result));
+                    //alert(obj);
+                    //alert('display_Name : ' + obj.display_name);
+                    document.getElementById(parntId + 'hdnCity').value= obj.display_name;
+                    document.getElementById(parntId + 'lblHeader').innerHTML = obj.display_name;
+
+                }).fail(function (result) {
+
+                }).always(function (result) {
+
+                });
+        }
+
+        function ShowDateTime() {
+
+            var curTime = new Date();
+            var curMonth = curTime.getMonth();
+            var curDay = curTime.getDate();
+            var curYear = curTime.getFullYear();
+            var curHours = curTime.getHours();
+            var curMinutes = curTime.getMinutes();
+            var curSeconds = curTime.getSeconds();
+
+            var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+            curDay = (curDay < 10 ? "0" : "") + curDay;
+
+            curMinutes = (curMinutes < 10 ? "0" : "") + curMinutes;
+            curSeconds = (curSeconds < 10 ? "0" : "") + curSeconds;
+
+            var timeOfDay = (curHours < 12) ? "AM" : "PM";
+
+            curHours = (curHours > 12) ? curHours - 12 : curHours;
+            curHours = (curHours == 0) ? 12 : curHours;
+
+            //var curTimeString = curDay + "-" + months[curMonth] + "-" + curYear + " " + curHours + ":" + curMinutes + ":" + curSeconds + " " + timeOfDay;
+            var curTimeString = curHours + ":" + curMinutes + ":" + curSeconds + " " + timeOfDay;
+
+            $('.dispDate').text(curTimeString);
+        }
+
+        function GetServerTime() {
+            $.ajax({
+                type: 'POST',
+                url: 'myLoc.aspx/GetTime',
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                data: "",
+                success: function (response) {
+                    if (response.d != null) { $('.dispDate').text(response.d); }
+                    else { Console.log("Something Went Wrong While Processing the File(s)", null); }
+                },
+                failure: function (response) { Console.log("Something Went Wrong While Processing the File(s)", null); }
+            });
+        }
+
+        $(document).ready(function () {
+
+            //---- Commented and Changed By Madhukar 12-Feb-2021 (Bug-Id 1229)  added Param
+            //ApplySelect2();
+            ApplySelect2(true);
+
+            if ($('#' + parntId + 'hdnSetZoneVal').val() == "2") {
+                $('#switch-Mode').prop("checked", true);
+            }
+
+            //$('.CustRemark').keydown(function (e) {
+            //    var textValue = $('.CustRemark').val(),
+            //        textlength = textValue.length,
+            //        setChar = 100,
+            //        remain = parseInt(setChar - textlength);
+            //    $('#leftChar').text(remain + " characters left");
+            //    if (remain <= 0 && e.which !== 0 && e.charCode !== 0) {
+            //        $('.CustRemark').val((textValue).substring(0, textlength - 1))
+            //    }
+            //    else if (textlength == 0) {
+            //        $('#leftChar').text = "";
+            //    }
+            //});
+
+            $("textarea").maxLength({
+                clearChars: true,
+                maxChars: $('.CustRemark').data('maxchar')
+            });
+
+            $(".datepicker").datepicker({
+                dateFormat: "dd-M-y",
+            });
+
+            if ($('#' + parntId + "hdnIsMapView").val() == "1") {
+                //---- Commented and Changed By Madhukar 01-Aug-2019 (Tsk-Id 808)  
+                //ShowDateTime();
+                //setInterval(ShowDateTime, 1000);
+
+                GetServerTime();
+                setInterval(GetServerTime, 1000);
+
+                if ($('#' + parntId + 'hdnSaveEmpImgMobile').val() == "Y") {
+                    
+                    //if ($('#' + parntId + 'hdnSaveEmpHDImg').val() == "Y") {
+                    //    Webcam.set({
+                    //        width: 190,
+                    //        height: 190,
+                    //        image_format: 'jpeg',
+                    //        jpeg_quality: 90,
+                    //        //dest_width: 640,
+                    //        //dest_height: 480
+                    //        dest_width: 320,
+                    //        dest_height: 240
+                    //    });
+                    //}
+                    //else {
+                    //    Webcam.set({
+                    //        width: 100,
+                    //        height: 100,
+                    //        image_format: 'jpeg',
+                    //        jpeg_quality: 90
+                    //    });
+                    //}
+                    //Webcam.attach('#my_camera');
+                    //$('.CustRemark').css('height', $('#my_camera').css('height'));
+
+                    ////---- Added By Madhukar 20-Nov-2020 (Tsk-Id 332)     
+                    //Webcam.on('live', function () {
+                    //    // camera is live, showing preview image
+                    //    $('#' + parntId + 'hdnIsCameraLoaded').val('1');
+                    //});
+                   
+                }
+                else {
+                    $('.camerablock').hide();
+                    $('.remarkblock').css('width', '100%');
+                    $('.remarkblock').css('margin-left', '2%');
+
+                }
+            }
+        });
+
+        function take_snapshot() {
+
+            var InputValue = $('.CustRemark').val();
+            if (validateSpecialCharsString(InputValue) == false) {
+                document.getElementById(parntId + "lblMsgErrClock").innerHTML = "Special charachters are not allowed.";
+                return false;
+            }
+
+            if ($('#' + parntId + "hdnIsMapView").val() == "1") {
+                if ($('#' + parntId + 'hdnSaveEmpImgMobile').val() == "Y") {
+                    $('#my_camera').hide();
+                    $('#' + parntId + 'imgEmp').show();
+                    // take snapshot and get image data
+                    //var data_uri = "data:image/jpeg;base64,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";
+
+                    
+                    //Webcam.snap(function (data_uri) {
+                    //    //document.getElementById('imgEmp').src = data_uri;
+                    //    $('#' + parntId + 'imgEmp').attr('src', data_uri);
+                    //    $('#' + parntId + 'hdnImage').val(data_uri);
+
+                    //});
+
+                    var vdata_uri = capturePhoto();
+
+                    $('#' + parntId + 'imgEmp').attr('src', vdata_uri);
+                    $('#' + parntId + 'hdnImage').val(vdata_uri);
+                    $('#video').hide();
+                    
+                }
+            }
+
+            return true;
+        }
+
+        function ValidateList() {
+            if (document.getElementById(parntId + 'txtFromDate').value != "" || document.getElementById(parntId + 'txtToDate').value != "") {
+                if (document.getElementById(parntId + 'txtFromDate').value == "") {
+                    document.getElementById(parntId + "lblErrMsg").innerHTML = "From date can not be blank.";
+                    return false;
+                }
+
+                if (document.getElementById(parntId + 'txtToDate').value == "") {
+                    document.getElementById(parntId + "lblErrMsg").innerHTML = "To date can not be blank.";
+                    return false;
+                }
+            }
+
+            if (document.getElementById(parntId + 'txtFromDate').value != "") {
+                if (ValidateDate('txtFromDate') == false) {
+                    document.getElementById(parntId + "lblErrMsg").innerHTML = "From date should be in dd-MMM-yy format.";
+                    return false;
+                }
+            }
+
+            if (document.getElementById(parntId + 'txtToDate').value != "") {
+                if (ValidateDate('txtToDate') == false) {
+                    document.getElementById(parntId + "lblErrMsg").innerHTML = "To date should be in dd-MMM-yy format.";
+                    return false;
+                }
+            }
+
+            if (document.getElementById(parntId + 'txtFromDate').value != "" && document.getElementById(parntId + 'txtToDate').value != "") {
+                if (CompdareDate('txtFromDate', 'txtToDate') == false) {
+                    document.getElementById(parntId + "lblErrMsg").innerHTML = "From date can not be greater than to date.";
+                    return false;
+                }
+            }
+
+
+        }
+
+        function toggleFilter() {
+            //$('.Filter').toggle('slow');
+            //alert(document.getElementById("ctl00_BodyContentPlaceHolder_divFilter").style.display)
+            if (document.getElementById(parntId + 'divFilter').style.display != null) {
+                if (document.getElementById(parntId + 'divFilter').style.display == "none") {
+                    document.getElementById(parntId + 'divFilter').style.display = "block"
+                }
+                else {
+                    document.getElementById(parntId + 'divFilter').style.display = "none"
+                }
+            }
+        }
+
+        //---- Commented and Changed By Madhukar 12-Feb-2021 (Bug-Id 1229)  added Param
+        //function ApplySelect2() {
+        function ApplySelect2(FromLoad) {
+            $(".select2").select2().on('change.select2', function (e) {
+                if ($('.select2').val() != null) {
+                    //$('#' + parntId + 'hdnSelectedEmp').val($('.select2').val().join());
+                    $('#' + parntId + 'hdnSelectedEmp').val($('.select2').val());
+                }
+                else { $('#' + parntId + 'hdnSelectedEmp').val(''); }
+            });
+            if (!FromLoad) {
+                SelectOnLoad();
+            }
+        }
+
+
+        function SelectOnLoad() {
+            //Selects the Pre-Selected options from DB
+            var vals = $('#' + parntId + 'hdnSelectedEmp').val().split(',').filter(Boolean);
+            $('.select2').val(vals).change();
+            //$(vals).each(function (i, v) {
+            //    if (v != "") {
+            //        $('.TrGroupSelect2').select2("trigger", "select", {
+            //            data: { id: v }
+            //        });
+            //    }
+            //});
+        }
+
+        function SetZoneVal() {
+
+            if ($('#switch-Mode').is(':checked') == true) {
+
+                //$('#' + parntId + 'hdnSetZoneVal').val('1');
+                $('#' + parntId + 'hdnSetZoneVal').val('2');
+
+            } else {
+                //$('#' + parntId + 'hdnSetZoneVal').val('2');
+                $('#' + parntId + 'hdnSetZoneVal').val('1');
+            }
+            console.log($('#' + parntId + 'hdnSetZoneVal').val());
+
+            //if ($('#' + parntId + 'hdnSetZoneVal').val() == "2") {
+            //    $('#switch-Mode').prop("checked", true)
+            //}
+        }
+
+        function ShowRestorePopup() {
+            var modal = document.getElementById('dvModal');
+
+            //modal.style.display = "block";
+            $('#dvModal').fadeToggle("slow", "linear");
+            btnClose.onclick = function () {
+                //modal.style.display = "none";
+                $('#dvModal').fadeToggle("slow", "linear");
+            }
+        }
+    </script>
+    
+    <script type="text/javascript">
+
+        function initMap() {
+            if (document.getElementById('map') != null) {
+                var map;
+                var Lati = $('#' + parntId + 'hdnLat').val();
+                var Long = $('#' + parntId + 'hdnLog').val();
+                var loc = { lat: Number(Lati), lng: Number(Long) };
+                //var loc = { lat: 19.1663, lng: 72.8526 };
+                var map = new google.maps.Map(
+                    document.getElementById('map'), {
+                        zoom: 15.7,
+                        center: loc,
+                        streetViewControl: false
+                    });
+                var marker = new google.maps.Marker({ position: loc, map: map });
+
+                var cityCircle = new google.maps.Circle({
+                    strokeColor: "#0000FF",
+                    strokeOpacity: .35,
+                    strokeWeight: 2,
+                    fillColor: "#0000FF",
+                    fillOpacity: .2,
+                    map: map,
+                    center: loc,
+                    radius: 200
+                });
+            }
+        }
+
+        function initMapForLocationIQ() {
+            if (document.getElementById('map') != null) {
+                var map
+                var vkey = document.getElementById(parntId + 'hdnKey').value;
+                var vmap = document.getElementById('map');
+                var Lati = $('#' + parntId + 'hdnLat').val();
+                var Long = $('#' + parntId + 'hdnLog').val();
+                var loc = { lng: Number(Long), lat: Number(Lati) };
+                //Add your LocationIQ Maps Access Token here (not the API token!)
+                locationiq.key = vkey;
+                //Define the map and configure the map's theme
+                var map = new maplibregl.Map({
+                    container: 'map',
+                    attributionControl: false, //need this to show a compact attribution icon (i) instead of the whole text
+                    style: 'https://tiles.locationiq.com/v3/streets/vector.json?key='+vkey,
+                    zoom: 12,
+                    center: loc /*[Long, Lati]*/
+                });
+            
+                //Define layers you want to add to the layer controls; the first element will be the default layer
+                var layerStyles = {
+                    "Streets": "streets/vector",
+                    "Dark": "dark/vector",
+                    "Light": "light/vector"
+                };
+            
+                map.addControl(new locationiqLayerControl({
+                    key: locationiq.key,
+                    layerStyles: layerStyles
+                }), 'top-left');
+
+                //Marker can be style either while adding the marker using JS or separately using CSS
+
+                //Here's an example where we use external CSS to specify background image, size, etc
+                //https://www.mapbox.com/mapbox-gl-js/api#marker
+                // first create DOM element for the marker
+                var el = document.createElement('div');
+                el.id = 'markerWithExternalCss';
+                // finally, create the marker
+                var markerWithExternalCss = new maplibregl.Marker(el)
+                    .setLngLat(loc)
+                    .addTo(map);
+
+                //Here's an example where use set variables like backgroundImage in JS itself (the common params are specified in CSS '.marker'
+                var el2 = document.createElement('div');
+                el2.className = 'marker';
+                el2.style.backgroundImage = 'url(marker.png)';
+                el2.style.width = '50px';
+                el2.style.height = '50px';
+            
+                // add marker to map
+                new maplibregl.Marker(el2)
+                    .setLngLat(loc)
+                    .addTo(map);
+
+                //Add Navigation controls to the map to the top-right corner of the map
+                var nav = new maplibregl.NavigationControl();
+                map.addControl(nav, 'top-right');
+
+
+                //Add a 'full screen' button to the map
+                map.addControl(new maplibregl.FullscreenControl());
+            
+                //Add a Scale to the map
+                map.addControl(new maplibregl.ScaleControl({
+                    maxWidth: 80,
+                    unit: 'metric' //imperial for miles
+                }));
+
+                //Add Geolocation control to the map (will only render when page is opened over HTTPS)
+                map.addControl(new maplibregl.GeolocateControl({
+                    positionOptions: {
+                        enableHighAccuracy: true
+                    },
+                    trackUserLocation: true
+                }));
+
+
+            }
+        }
+
+        //---- Added By Madhukar 02-Sep-2020 (Tsk-Id 137) if key auth fails then show this
+        function gm_authFailure() {
+            var MapErrorHTML = "<span id='MaplblErrMsg' class='mapError'> Location not available <br/>(Please check Geo-Location key) </span>";
+            $('#map').html(MapErrorHTML);
+        }
+
+
+        function showSnackBar() {
+            var x = document.getElementById("snackbar");
+            x.className = "show";
+            setTimeout(function () { x.className = x.className.replace("show", ""); }, 6000);
+        }
+
+    </script>
+
+    <script type="text/javascript">
+
+        $(document).ready(function () {
+            applySelect2();
+        });
+
+        function applySelect2() {
+            $('.Select2').select2({
+                width: '150px',
+                placeholder: "--Select--",
+                allowClear: true,
+                templateResult: getTemplate,
+            });
+        }
+
+
+        const getTemplate = (group) => {
+            if (!group.id) {
+                return group.text;
+            }
+
+            let select2Tempalte = '';
+
+            select2Tempalte = ` <span>${group.text}</span>`
+
+            const $group = $(select2Tempalte);
+            return $group;
+        };
+
+    </script>
+
+   
+
+    <style type="text/css">
+        .custIconCommon {
+            font-size: 18px;
+            padding: 5px;
+        }
+
+        .CustRemark {
+            height: 164px;
+        }
+
+        .CustRemarkDiv {
+            float: left;
+            margin: 3%;
+        }
+
+        #spnMap, #map {
+            width: auto;
+            height: 250px;
+        }
+
+        span#ctl00_BodyContentPlaceHolder_lblMsgErrClock:empty,
+        span#ctl00_BodyContentPlaceHolder_lblGenErr:empty {
+            display: none;
+        }
+
+        span#ctl00_BodyContentPlaceHolder_lblMsgErrClock,
+        span#ctl00_BodyContentPlaceHolder_lblGenErr {
+            float: left;
+            border: 1px solid #cd0000;
+            text-align: left;
+            display: block;
+            color: #CD0000;
+            font-size: 14px;
+            margin: 10px 0% 0px 0%;
+            padding: 1%;
+        }
+
+        /*Timeline*/
+        ul.timeline {
+            list-style-type: none;
+            position: relative;
+        }
+
+            ul.timeline:before {
+                content: ' ';
+                /*background: #d4d9df;*/
+                background: #ffc38c;
+                display: inline-block;
+                position: absolute;
+                left: 12px;
+                width: 2px;
+                height: 100%;
+                z-index: 400;
+            }
+
+            ul.timeline > li {
+                margin: 20px 0;
+                padding-left: 10px;
+            }
+
+                ul.timeline > li:before {
+                    content: ' ';
+                    background: white;
+                    display: inline-block;
+                    position: absolute;
+                    border-radius: 50%;
+                    /*border: 3px solid #dc6900;*/
+                    left: 0px;
+                    width: 20px;
+                    height: 20px;
+                    z-index: 400;
+                }
+
+        .timeline-Date {
+            float: left;
+            margin-left: 1%;
+            color: #dc6900;
+        }
+
+        .timeline-time {
+            color: #dc6900;
+            float: left;
+            margin-left: 8%;
+        }
+
+        .timeline-location {
+            margin-left: 8%;
+            margin-top: 2%;
+        }
+
+        .timeline-End {
+            border-bottom: 1px dashed #dad6d6;
+            width: 90%;
+            margin-left: 8%;
+            /*margin-top: 5%;*/
+        }
+
+        .timeline-Clock {
+            z-index: 999;
+            font-size: 21px;
+            position: absolute;
+            left: 2px;
+            color: #dc6900;
+        }
+
+        .ClockIn {
+            color: white;
+            background: #62d27ca6;
+            border-radius: 50px;
+            padding: 2px 12px;
+            text-transform: uppercase;
+            border: 1px solid #28a745;
+            font-size: 11px;
+        }
+
+        .ClockOut {
+            background-color: #007bff4f;
+            border-radius: 50px;
+            padding: 2px 6px;
+            border: 1px solid #007bff;
+            color: white;
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+
+        .ClockbyHR {
+            color: white;
+            background: #f17a0dc7;
+            border-radius: 50px;
+            padding: 2px 12px;
+            text-transform: uppercase;
+            border: 1px solid #dc6900;
+            font-size: 11px;
+        }
+
+        .ClockbyManager {
+            color: white;
+            background: #4c80e0d6;
+            border-radius: 50px;
+            padding: 2px 12px;
+            text-transform: uppercase;
+            border: 1px solid #1359ca;
+            font-size: 11px;
+        }
+
+        .ui-datepicker {
+            z-index: 999 !important;
+        }
+
+        .sub-container {
+            padding: 5px 10px;
+        }
+
+        .custFilter {
+            font-size: 25px;
+            float: right;
+            padding: 4px;
+        }
+
+        .custbutton {
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+            .custbutton:before {
+                border-radius: 100px;
+                border: 2px solid #007bffe8;
+                box-shadow: 0 0 15px 4px rgba(80, 192, 255, 0.82), 0 0 15px 0px rgba(0, 255, 204, 0.22) inset;
+                content: "";
+                display: block;
+                position: absolute;
+                /*left: 50%;
+                top: 50%;
+                height: 110px;
+                width: 110px;
+                margin-left: -57px;
+                margin-top: -57px;*/
+                opacity: 1;
+                left: 40%;
+                top: 40%;
+                height: 130px;
+                width: 130px;
+                /*margin-left: -55px;
+                margin-top: -55px;*/
+                margin-left: -53px;
+                margin-top: -53px;
+            }
+
+            .custbutton.custcircle {
+                background: #007bff;
+                border: none;
+                border-radius: 900px;
+                color: #e4ecfa;
+                cursor: pointer;
+                display: block;
+                /*width: 100px;
+                height: 100px;*/
+                position: relative;
+                margin: auto;
+                margin-top: 25px;
+                line-height: 20px;
+                width: 120px;
+                height: 120px;
+            }
+
+        .ClockinoutBtn {
+            padding-top: 38%;
+            padding-left: 3%;
+            font-size: 18px;
+        }
+
+        .dispDate {
+            font-size: 13px;
+        }
+
+        .Cust-lblRemark {
+            word-break: break-all;
+        }
+
+        .Cust-lblDiffTime {
+            margin: 4% 0 1% 9%;
+            color: #6f6f6f;
+            margin: 10% 0 10% 8%;
+            color: #6f6f6f;
+            width: 90%;
+            text-align: right;
+            line-height: 0.1em;
+            display: inherit;
+        }
+
+            .Cust-lblDiffTime span:not(:empty) {
+                background-color: #fdf2c9;
+                padding: 4px 10px;
+                border-radius: 12px 10px 12px 10px;
+                border: 1px solid #DDDDDD;
+            }
+
+        /* SELECT2 STYLES Start*/
+
+        .select2-results__option[aria-selected=true] {
+            display: none;
+        }
+
+        .select2-container--default.select2-container--focus .select2-selection--multiple {
+            border-color: #ccc;
+        }
+
+        .select2-container .select2-selection--multiple {
+            /*height: 40px;*/
+        }
+
+        .locked-tag .select2-selection__choice__remove {
+            display: none !important;
+        }
+        /* SELECT2 STYLES End*/
+        .hidden {
+            display: none;
+        }
+
+        .lblCon {
+            font-size: 15px;
+        }
+
+        .fldborder {
+            border: 1px solid #CCC;
+        }
+
+
+        /*---------------------------- Snackbar message css start------------------------*/
+        #snackbar {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: #fff;
+            border-radius: 2px;
+            padding: 12px;
+            position: fixed;
+            z-index: 1000;
+            text-align: left;
+            left: 40%;
+            bottom: 70px;
+            font-size: 17px;
+        }
+
+            #snackbar.show {
+                visibility: visible;
+                -webkit-animation: fadein 0.5s, fadeout 0.5s 5.5s;
+                animation: fadein 0.5s, fadeout 0.5s 5.5s;
+            }
+
+        @-webkit-keyframes fadein {
+            from {
+                bottom: 0;
+                opacity: 0;
+            }
+
+            to {
+                bottom: 30px;
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadein {
+            from {
+                bottom: 0;
+                opacity: 0;
+            }
+
+            to {
+                bottom: 30px;
+                opacity: 1;
+            }
+        }
+
+        @-webkit-keyframes fadeout {
+            from {
+                bottom: 30px;
+                opacity: 1;
+            }
+
+            to {
+                bottom: 0;
+                opacity: 0;
+            }
+        }
+
+        @keyframes fadeout {
+            from {
+                bottom: 30px;
+                opacity: 1;
+            }
+
+            to {
+                bottom: 0;
+                opacity: 0;
+            }
+        }
+
+        /*---------------------------- Snackbar message css start------------------------*/
+    </style>
+
+    <style type="text/css">
+            /*Example 1, all the CSS is defined here and not in JS*/            
+            #markerWithExternalCss {
+                background-image: url('images/marker.png');
+                background-size: cover;
+                width: 50px;
+                height: 50px;
+                cursor: pointer;
+            }
+            
+            /*Example 2, most of the CSS is set by JS*/
+            .marker {
+                display: block;
+                border: none;
+                cursor: pointer;
+                padding: 0;
+            }
+
+        </style>
+
+
+    <style type="text/css">
+        .color-blue2-dark {
+            color: #0A5A8D !important;
+        }
+
+        .color-red1-dark {
+            color: #BF263C !important;
+        }
+
+        .color-orange-dark {
+            color: #dc6900 !important;
+        }
+
+        .color-maroon-dark {
+            color: #900C3F !important;
+        }
+
+        .rdColList input[type=radio] {
+            display: none;
+        }
+
+        .rdColList label {
+            margin-left: 5px !important;
+            padding: 5px !important;
+        }
+
+        .footerICon {
+            font-size: 20px;
+        }
+
+        .footercolor {
+            color: #fff;
+            font-size: 10px;
+        }
+
+        .card-body {
+            padding: 0px 10px 0px 10px;
+        }
+
+        .h27 {
+            height: 27px;
+        }
+
+        /*Added by Hitesh On 19/04/2022 */
+        .hideSS {
+            top: -148px !important;
+        }
+           .headerBlock .headerTitle .greetings p {          
+            width: auto !important;           
+        }
+    </style>
+<link href="App_Themes/Blue/mobiblue.css" type="text/css" rel="stylesheet" /></head>
+<body style="margin-top: 0; margin-left: 0; margin-right: 0">
+    <form method="post" action="./myloc.aspx?rp=6c9pN3YG1g1Z9ks8dbPSag&amp;IsView=5MFoSrjNxGCIHlWPVx1fCA" id="aspnetForm">
+<div class="aspNetHidden">
+<input type="hidden" name="__EVENTTARGET" id="__EVENTTARGET" value="" />
+<input type="hidden" name="__EVENTARGUMENT" id="__EVENTARGUMENT" value="" />
+<input type="hidden" name="__LASTFOCUS" id="__LASTFOCUS" value="" />
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="grLMmwLXphbEpV3i7PDlPpXDARJI3bFVdU2zDBbp5V4/U15tIeYpw9yfsyqwLUxzicpgxLDHO42JguPF5BteOhbj5Z4OHQ1Y2cDBFbOBjnz71xIVWoEs5kC0VIxNA+/pHw55hY9uEC5uKsvtCjxdeG2n2Akcc/KqZLDGgO2pToFXKUPqb5Yt06kMK08WfTsjcFcUAfyzPT+PbaNkq6LwNmWKjFwaTMq+aIQqwI4+LHgC3rhYrobyBBJI9bQv0pTGjkMGWej9zkJXO7bsmRUmNskRMArUQN5bCENg6nlxl5JOzfC1gTVKnTKihaVP0SpbiupJSeBVDAovgz7o8DOitkGihoBBSJMbruiDZkxvhJbsHiT2Ocf0nZNAkDqiuCzQq6lcYqcYzbwfVYBEtQwvf6pjbsWgnQJYJNz6r1GuPsfTfxRwkqaDN1nQJIzw6f6mPrAvx2uUNv6LIVAsbj50RTdpcbwebtrX04o6dMbO8aznZBN7RvnEupHMfUcCu0bY1cYsbDy0G9osmdzIpoyng4LOF6o7VPnw9d+GaHHdiHDfrb35bHo2RD+qDD4F5xO6DSWiu1y4/PZ1NCh6aSiOIClhlnBpEJ4mf59N4Uq4Kb8REtmDps66GxlFTi4odwfkK2XX8i1VFpgdXNXZfLFPrpWJfTEW04t/+uwU67aKqyM4wNRN+fTLnXntxVieZxl3ktOE8F6I6C3V6uWZc5Mrbgl97x2xLDKteTxfZ5YsaT/jRSbusbLb99sQk5xNaCrVvSbq0n/XZIN6bQcxcScYhVtxMaOLu8QJPt1CfRzZBR2J9yTfG4bSxjobEtJX1G3QgmkYc8BK7T3yUdVKCAPCYk+9hbED58p7UBxJSxYhvNXBoszYOwN8fbIapipgNkDb+X7q/6oG7fVPQlHAnFABNfA5HQjDYNmrfaedgOA6k03CYCg+Nu7GyPpHxd8+nxiPHMzxNOC+Y70Dd4zxNpbjCTozSB2J/P4TB1oKEdbQLCeGh8eLVYMpCghSoTKrCfVu+0f2ZJJH7A1TjLf6fEh4lenmiWlFLcqOlUuhNRRBWmYX7pwPgzS52DILam5LE8ThFJmYtM0YMKKrniBvoZFc/xg7V5AcYpG0nXWL57fPT1+eKgnHOVH5AjRokgyxZvuVbT1P4JGDxX6mW1fB2xQJMFLBHHYsU5ZLJkqxm5A8I2FcfvonXigazqw5sYz8qgaN7ZjPQFRqoA+DHHyrP7MvuOiQjmQ8IzB3n7PuADvwMgA7uADwKGArOrCk/9HbG09NWieRrEK+FKpIXaSR6MGRabMBUood4WXwCpKN6D7eobp3HqcWRH355DrmsDkahS/BUq5dZbRzhBVR3YkNxyDWhsvOSO+iyXkg22VMDf0HXwN7k5M4U9ui5er7J1E97br1fPnjjkec+0cQL7w1z2aGixy/gt4EsP6LbaJan1Yz8kMec30MSA8Ro+MUYaTPTdMpgvMr4KQAH5m2ORBANEMbcXULp6ZE6n7CzYaIE0eDGr+rrUYM/XOljfnl6wM+xG8zstcI28LoVs3gH02BRUub5pkw1Ax15lRhrcxHw/38rH/Jex/pYu5oW0kJL40/hQxF" />
+</div>
+
+<script type="text/javascript">
+//<![CDATA[
+var theForm = document.forms['aspnetForm'];
+if (!theForm) {
+    theForm = document.aspnetForm;
+}
+function __doPostBack(eventTarget, eventArgument) {
+    if (!theForm.onsubmit || (theForm.onsubmit() != false)) {
+        theForm.__EVENTTARGET.value = eventTarget;
+        theForm.__EVENTARGUMENT.value = eventArgument;
+        theForm.submit();
+    }
+}
+//]]>
+</script>
+
+
+<script src="/PSMobile/WebResource.axd?d=_sROzK_ZlnscxZnmoR3DkCcqe-zvaX0D-oSESrh9CpSrit5WFfudwVEaauk-TpN7B4RrwHTRPxYhkUi7wg7XXgAZiBFinxqhEn6BwcLZRbM1&amp;t=638628405619783110" type="text/javascript"></script>
+
+<div class="aspNetHidden">
+
+	<input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="1E3786D8" />
+	<input type="hidden" name="__SCROLLPOSITIONX" id="__SCROLLPOSITIONX" value="0" />
+	<input type="hidden" name="__SCROLLPOSITIONY" id="__SCROLLPOSITIONY" value="0" />
+	<input type="hidden" name="__VIEWSTATEENCRYPTED" id="__VIEWSTATEENCRYPTED" value="" />
+	<input type="hidden" name="__PREVIOUSPAGE" id="__PREVIOUSPAGE" value="wk3Bsl_CYS-laMMpUDJGNefYW9_Sr1GL994XeC243QMAMAFGp_jX-mZZTxOHxxCAykDBHY4nciq9BgcSve8fl3X3ogtXsUWxxjZfIROVQBk1" />
+	<input type="hidden" name="__EVENTVALIDATION" id="__EVENTVALIDATION" value="Gr1FzYq6iUnmGSxejJJI92ZuXzn0+m1Xtr6DgLCLUYtHsMWmHhoKtwMO6ZKy1fUyd+d9eMcXa+LWDVAC4t+ipxe6kC94jnCw017W2TGWZNa5LKv4+lgIcBv3Q6aSlRlz088HJo9W6l3qQ3yLbOjPaLqwipux905LF8/RRhTkiOvgZQVJZaX8t6r4lRK7u+g2ZgdDZivRqFkhtXZ1PlAkOSVeV+N5timPvWIzARnr9plfEyKC2axEah32WkQE5h3yA375HnFQmUNUNKk/hFX3V0n2kNCxNL+0cPasqZV7QSMpb8cnj2dVHAo1MtGXjJvMPtbjc7oZolmMCM4Pd0wUzLEOff1l9xFV60iDfl4vsLnPnOElRXnsMq7/eqIOTr84FF13CnOwKwJJt5OQwGe7ZMCvWK08gaasPRuP+7ZjfvwT5YeehnYH3Nlj1/Y4Fti554C3oEzB1z3+RCUdd9af480g16CNXDxKB50n7KGxq5bvv4bT/2h3R9+HGeSP0zEZKI5xQVuI54Yv/pBOJg0c90EzBeSe1wRT1xCvbDydhJmXrJd0yrnB+7CRqSb2DEur+MVB/N1YLdjKqnx/lrNwPqISGjUomtIVayt6GPcZksaxAguCFlK6lcgVMQPE/BmeSHxviOcgGiZ+5xzMaiv8gjgQL4HWw5abYrEUv2DD5OzQuQqAGsq7pkjmbUFd5OgV0nEFrh3flfzLGJT3+22cJ2N9v3HCsF5j2NIbP6CapAVgusQoZ4NI1qJZ8zzkD21PH7dyUzr89+l1wGaNJ68HTdCvhQ7BpKLvnA6avpWTophu+DFXA6lyRM0ztKN1Os2ORGGxENsQsYlzq7f4Ur3Yn6eVfWx0/WIQ7+WrXBz70pjSPQyGpx7+yLnz6FZgulmd8NmhGuJCw2nfx1tC+H4BeFeiuhT0lEcQ9gL7+5Mvt7mEN7hZGFVlJ6Lt867Qpq4z9/N9tTnBA+PjfPRIa6oJ+RJx2Cn34cL6PE0P+AnUN3szvHu1LmrwaXbPx9ZZRbcy4eDqI/hI83tbclGrh1nAmZWH298UfHdLPIihmcNvKyPa+9cX5CeG9u0MPDDf92udZAvDcMWfBNe1igaylxxdXBRhCv7lIluoj+0bS0b7bDBv0jQVP/nSdey83tTim28aO3xV8olU4EDtp5e7K2rtTg==" />
+</div>
+        <div class="headerBlock">
+
+            
+            
+            
+
+            <div class="homeIcon hidden">
+                <a href="https://ciprognosys.coreintegra.com/psmobile/homepage.aspx" title="" class="Home">Home</a>
+            </div>
+            <div class="headerTitle">
+                <div class="greetings">                                              
+                    <p title="Prognosys Medical Systems Pvt Ltd" class="welcome fbold">Prognosys Medical Systems Pvt Ltd</p>
+                    
+                       
+                    <p title="Welcome:Sandeep Kumar Yadav" class="welcome" style="padding-top:0px;padding-bottom:0px;">Welcome:Sandeep Kumar Yadav</p>
+                    
+                </div>
+            </div>
+
+            <div class="SettingsSection dropdown hidden">
+                <i class="cust-btnSettings2 fas fa-bars"></i>
+                <div class="dropdown-content">
+
+                    
+                </div>
+            </div>
+
+        </div>
+
+        
+
+        <input name="ctl00$hdnGeoAPIval" type="hidden" id="ctl00_hdnGeoAPIval" value="pk.c08d1307c75136fa2709e2374acd8cce" />
+
+        
+    <div class="container">
+        
+        
+        <div style="display: none">
+            <div class="titleLeaveList" style="display: none">
+                
+            </div>
+            <div class="backbuttonNoWidth padTop">
+            </div>
+            <div class="titleLeaveList" style="display: none">
+                
+                
+            </div>
+            <div class="leaveRow noPadBottom">
+                <div class="dayBlock padLeft">
+                </div>
+            </div>
+            <div class="leaveRow noPadBottom">
+                <br />
+                <div class="CustRemarkDiv">
+                </div>
+                
+                
+                <br />
+
+            </div>
+            <div class="leaveRow noPadBottom" style="margin-top: 5%">
+            </div>
+        </div>
+        
+
+        <div class="sub-container">
+            <span id="ctl00_BodyContentPlaceHolder_lblGenErr" style="color:Red;"></span>
+            
+
+                    <div class="titleLeaveList">
+                        <h3>
+                            <span id="ctl00_BodyContentPlaceHolder_Label5">Attendance</span></h3>
+                        <span id="ctl00_BodyContentPlaceHolder_lblMarkinOutHead" class="lblHeader">Clock In</span>
+                    </div>
+
+                    <div class="backbutton padTop">
+                        <a id="ctl00_BodyContentPlaceHolder_btnBack" class="backArrow" href="https://ciprognosys.coreintegra.com/psmobile/EmpReqHome.aspx?cl=jrWXFUNjwzJ2QjXBznZhqA"> Back</a>
+                    </div>
+
+                    <br />
+
+                    <div class="leaveRow">
+                        <span id="ctl00_BodyContentPlaceHolder_lblMsgErrClock" class="warning" style="color:Red;"></span>
+                    </div>
+
+                    
+                    
+
+                    
+
+                    <div class="leaveRow">
+                        <div class="remarkblock">
+                            <p>
+                                <span id="ctl00_BodyContentPlaceHolder_lblMacDateTime1" style="font-size:13px;display: none"></span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="leaveRow">
+                        <div class="remarkblock">
+                            
+                        </div>
+
+                    </div>
+
+                    <div class="leaveRow" style="margin-left: -2%;">
+                        <div class="panelBlock marR camerablock">
+                            <div id="my_camera">
+                            </div>
+                            <img id="ctl00_BodyContentPlaceHolder_imgEmp" alt="Image" style="display: none; height: 190px; width: 190px" />
+                            <canvas id="canvas" style="display:none;"></canvas>
+                            <video id="video" autoplay playsinline  style="display:block; height: 190px; width: 170px;"></video>
+                        </div>
+
+                        <div class="panelBlock remarkblock">
+                            <textarea name="ctl00$BodyContentPlaceHolder$txtRemark" rows="2" cols="20" id="ctl00_BodyContentPlaceHolder_txtRemark" class="CustRemark" data-maxchar="100" placeholder="Remark for Clock In">
+</textarea>
+                            
+                            <br />
+                            <p class="loginLabel chars-remaining" id="leftChar">
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="leaveRow">
+
+                        
+
+                        <div>
+                            <h3>
+                                <span id="ctl00_BodyContentPlaceHolder_lblTopHeader" class="lblTopHeader">Location </span><i id="ctl00_BodyContentPlaceHolder_locMarker" class="custIconCommon fas fa-map-marker-alt"></i>
+                                <span id="ctl00_BodyContentPlaceHolder_lblHeader" class="lblHeader"></span>
+
+                            </h3>
+                        </div>
+                    </div>
+
+                    
+
+                    
+                    
+
+                    
+
+                    <br />
+
+
+
+                    <br />
+
+                    <div class="leaveRow" style="margin-left: -2%;">
+                    </div>
+
+                    <br />
+
+                    <div class="leaveRow">
+                        <div class="" style="text-align: center">
+
+                            <a onclick="return take_snapshot();" id="ctl00_BodyContentPlaceHolder_btnAddNew" class="custbutton custcircle" href="javascript:__doPostBack(&#39;ctl00$BodyContentPlaceHolder$btnAddNew&#39;,&#39;&#39;)">
+                                <div class="ClockinoutBtn">
+                                    <span id="ctl00_BodyContentPlaceHolder_lblClockstats">Clock In</span>
+                                    <br />
+                                    <span id="ctl00_BodyContentPlaceHolder_lblDateTime" class=" dispDate"></span>
+                                </div>
+                            </a>
+
+                        </div>
+                    </div>
+
+                
+        </div>
+    </div>
+
+
+    <div id="snackbar">
+        <span id="ctl00_BodyContentPlaceHolder_lblSnackBar"></span>
+    </div>
+
+    <div class="errorDivBlock">
+        <span id="ctl00_BodyContentPlaceHolder_lblMsg"></span>
+    </div>
+    <div class="hiddenFileds">
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnLog" id="ctl00_BodyContentPlaceHolder_hdnLog" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnLat" id="ctl00_BodyContentPlaceHolder_hdnLat" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnCity" id="ctl00_BodyContentPlaceHolder_hdnCity" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnTotalRecordCount" id="ctl00_BodyContentPlaceHolder_hdnTotalRecordCount" value="0" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnCallFrom" id="ctl00_BodyContentPlaceHolder_hdnCallFrom" value="in" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnReqFrom" id="ctl00_BodyContentPlaceHolder_hdnReqFrom" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnSaveEmpImgMobile" id="ctl00_BodyContentPlaceHolder_hdnSaveEmpImgMobile" value="Y" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnImage" id="ctl00_BodyContentPlaceHolder_hdnImage" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnAllowEmpfence" id="ctl00_BodyContentPlaceHolder_hdnAllowEmpfence" value="N" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnMobileIOApproval" id="ctl00_BodyContentPlaceHolder_hdnMobileIOApproval" value="N" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnIsMapView" id="ctl00_BodyContentPlaceHolder_hdnIsMapView" value="1" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnNoConMarkInOut" id="ctl00_BodyContentPlaceHolder_hdnNoConMarkInOut" value="N" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnIsMapVisible" id="ctl00_BodyContentPlaceHolder_hdnIsMapVisible" value="N" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnMacTimeEnabled" id="ctl00_BodyContentPlaceHolder_hdnMacTimeEnabled" value="N" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnMacdatetime" id="ctl00_BodyContentPlaceHolder_hdnMacdatetime" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnServerTime" id="ctl00_BodyContentPlaceHolder_hdnServerTime" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnUploadedFile" id="ctl00_BodyContentPlaceHolder_hdnUploadedFile" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnEmpTCode" id="ctl00_BodyContentPlaceHolder_hdnEmpTCode" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnUploadedFileErr" id="ctl00_BodyContentPlaceHolder_hdnUploadedFileErr" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnSaveEmpHDImg" id="ctl00_BodyContentPlaceHolder_hdnSaveEmpHDImg" value="Y" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnSelectedEmp" id="ctl00_BodyContentPlaceHolder_hdnSelectedEmp" value="160" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnMaximumTemp" id="ctl00_BodyContentPlaceHolder_hdnMaximumTemp" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnShowCovidField" id="ctl00_BodyContentPlaceHolder_hdnShowCovidField" value="N" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnSetZoneVal" id="ctl00_BodyContentPlaceHolder_hdnSetZoneVal" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnShowSnackBar" id="ctl00_BodyContentPlaceHolder_hdnShowSnackBar" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnLocMandatory" id="ctl00_BodyContentPlaceHolder_hdnLocMandatory" value="N" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnShowFenceFor" id="ctl00_BodyContentPlaceHolder_hdnShowFenceFor" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnCaptureClientIp" id="ctl00_BodyContentPlaceHolder_hdnCaptureClientIp" value="Y" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnTimeZoneId" id="ctl00_BodyContentPlaceHolder_hdnTimeZoneId" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnRemarkMandatory" id="ctl00_BodyContentPlaceHolder_hdnRemarkMandatory" value="N" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnIsCameraLoaded" id="ctl00_BodyContentPlaceHolder_hdnIsCameraLoaded" value="0" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnKey" id="ctl00_BodyContentPlaceHolder_hdnKey" value="pk.c08d1307c75136fa2709e2374acd8cce" />
+        <input type="hidden" name="ctl00$BodyContentPlaceHolder$hdnKeyOwner" id="ctl00_BodyContentPlaceHolder_hdnKeyOwner" value="LocationIQ" />
+    </div>
+
+    
+     <script type="text/javascript">
+         
+         const video = document.getElementById("video");
+         const canvas = document.getElementById("canvas");
+         let mediaStream;
+
+         $(document).ready(function () {
+             if (video) {
+                 if ($('#' + parntId + 'hdnSaveEmpImgMobile').val() == "Y") {
+                     // Start camera stream
+                     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                         navigator.mediaDevices.getUserMedia({ video: true })
+                             .then(stream => {
+                                 mediaStream = stream;
+                                 video.srcObject = stream;
+                             })
+                             .catch(error => {
+                                 alert("Unable to access camera: " + error.message);
+                             });
+                     } else {
+                         console.error("getUserMedia not supported in this browser.");
+                     }
+                 }
+             }
+         });
+
+         function capturePhoto() {
+            //Added  on 13/02/2026 for SCH TASK ID 11648
+            if (video.videoWidth === 0 && video.videoHeight === 0)
+            {
+                return null;
+            } //END  SCH TASK ID 11648
+             const context = canvas.getContext("2d");
+             canvas.width = video.videoWidth;
+             canvas.height = video.videoHeight;
+             context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+             const dataURL = canvas.toDataURL("image/jpeg", 0.7);         
+             
+             return dataURL;
+         }
+
+    </script>
+
+
+        <input type="hidden" name="ctl00$hdnDomain" id="ctl00_hdnDomain" value="https://ciprognosys.coreintegra.com/psmobile" />
+        <input type="hidden" name="ctl00$hdnCurrentMenu" id="ctl00_hdnCurrentMenu" />
+        <input type="hidden" name="ctl00$hdnFirstMenuID" id="ctl00_hdnFirstMenuID" />
+
+        <input type="hidden" name="ctl00$hdnThirdMenuID" id="ctl00_hdnThirdMenuID" />
+        <div id="ctl00_LiSelID" style="visibility: hidden"></div>
+        <!--/demo-html -->
+
+
+
+        <div class="mobile-bottom-nav">
+            <div class="mobile-bottom-nav__item">
+                <div class="mobile-bottom-nav__item-content">
+                    <a href='https://ciprognosys.coreintegra.com/psmobile/VirtualIdCard.aspx' class="text-white">
+                        <i class="cSignOut far fa-id-badge footerICon"></i>
+                        
+                    </a>
+                    <span class="footercolor">Id Card</span>
+                </div>
+            </div>
+            <div class="mobile-bottom-nav__item">
+                <div class="mobile-bottom-nav__item-content">
+                    
+                    <div id="demo_box">
+                        <span class="pop_ctrl"><i class="fas fa-cog footerICon"></i></span>
+                        <ul id="ctl00_demo_ul" class="hideSS">
+                            <li class="demo_li hidden">
+                                <i class="fas fa-user"></i>
+                                <a id="ctl00_lnkSelfService" title="Self Service" href="javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(&quot;ctl00$lnkSelfService&quot;, &quot;&quot;, false, &quot;&quot;, &quot;EmpProf.aspx&quot;, false, true))">Self Service</a>
+                            </li>
+                            
+                            
+                            <li class="demo_li">
+                                <i class="fas fa-key"></i>
+                                <a id="ctl00_lnkChangePass" title="Change Password" href="javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(&quot;ctl00$lnkChangePass&quot;, &quot;&quot;, false, &quot;&quot;, &quot;ChangePassword.aspx&quot;, false, true))"> Change Password</a>
+                            </li>
+                            
+                            <li class="demo_li">
+                                <i class="fas fa-user-cog"></i>
+                                <a>Theme Colour
+                                </a>
+                                <table id="ctl00_rdoColList" class="list-unstyled rdColList">
+	<tr>
+		<td><input id="ctl00_rdoColList_0" type="radio" name="ctl00$rdoColList" value="Blue" onclick="javascript:setTimeout(&#39;__doPostBack(\&#39;ctl00$rdoColList$0\&#39;,\&#39;\&#39;)&#39;, 0)" /><label for="ctl00_rdoColList_0">
+                                        <i class="fas fa-circle font-25 color-blue2-dark"></i>
+                                    </label></td><td><input id="ctl00_rdoColList_1" type="radio" name="ctl00$rdoColList" value="Orange" onclick="javascript:setTimeout(&#39;__doPostBack(\&#39;ctl00$rdoColList$1\&#39;,\&#39;\&#39;)&#39;, 0)" /><label for="ctl00_rdoColList_1">
+                                        <i class="fas fa-circle color-orange-dark font-25"></i>
+                                    </label></td><td><input id="ctl00_rdoColList_2" type="radio" name="ctl00$rdoColList" value="Red" onclick="javascript:setTimeout(&#39;__doPostBack(\&#39;ctl00$rdoColList$2\&#39;,\&#39;\&#39;)&#39;, 0)" /><label for="ctl00_rdoColList_2">
+                                        <i class="fas fa-circle color-red1-dark font-25"></i>
+                                    </label></td><td><input id="ctl00_rdoColList_3" type="radio" name="ctl00$rdoColList" value="Maroon" onclick="javascript:setTimeout(&#39;__doPostBack(\&#39;ctl00$rdoColList$3\&#39;,\&#39;\&#39;)&#39;, 0)" /><label for="ctl00_rdoColList_3">
+                                        <i class="fas fa-circle color-maroon-dark font-25"></i>
+                                    </label></td>
+	</tr>
+</table>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <span class="footercolor">Settings</span>
+            </div>
+
+            <div class="mobile-bottom-nav__item mobile-bottom-nav__item--active">
+                <div class="mobile-bottom-nav__item-content">
+                    
+                    <a id="ctl00_lnkHome" class="text-white" href="javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(&quot;ctl00$lnkHome&quot;, &quot;&quot;, false, &quot;&quot;, &quot;homepage.aspx&quot;, false, true))">
+                        <i class="fa fa-home footerICon" ></i>
+                    </a>
+                </div>
+                <span class="footercolor">Home</span>
+            </div>
+            <div class="mobile-bottom-nav__item">
+                <div class="mobile-bottom-nav__item-content">
+                    <a id="ctl00_LinkButton1" class="text-white" href="javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(&quot;ctl00$LinkButton1&quot;, &quot;&quot;, false, &quot;&quot;, &quot;logoff.aspx&quot;, false, true))">
+                        <i class="cSignOut fa fa-sign-out-alt footerICon" ></i>
+                    </a>
+                    
+                </div>
+                <span class="footercolor">Log Out</span>
+            </div>
+
+            <div class="mobile-bottom-nav__item">
+                <div class="mobile-bottom-nav__item-content">
+                    <a target="_blank" href="http://www.spinetechnologies.com">
+                        
+                        <img src="https://ciprognosys.coreintegra.com/psmobile/UserControls/spnInfo.ashx" /></a>
+                </div>
+
+            </div>
+            
+        </div>
+    
+
+<script type="text/javascript">
+//<![CDATA[
+
+theForm.oldSubmit = theForm.submit;
+theForm.submit = WebForm_SaveScrollPositionSubmit;
+
+theForm.oldOnSubmit = theForm.onsubmit;
+theForm.onsubmit = WebForm_SaveScrollPositionOnSubmit;
+//]]>
+</script>
+</form>
+
+</body>
+
+<script type="text/javascript">
+    history.forward()           
+</script>
+
+<script type="text/javascript" language="javascript">
+
+    try {
+
+        $('input[type="text"]').focus(function () {
+            $(this).addClass("focus");
+        });
+
+        $('input[type="text"]').blur(function () {
+            $(this).removeClass("focus");
+        });
+
+        $('input[type="submit"]').focus(function () {
+            $(this).addClass("buttonFocus");
+        });
+
+        $('input[type="submit"]').blur(function () {
+            $(this).removeClass("buttonFocus");
+        });
+
+        $('input[type="button"]').focus(function () {
+            $(this).addClass("buttonFocus");
+        });
+
+        $('input[type="button"]').blur(function () {
+            $(this).removeClass("buttonFocus");
+        });
+    }
+
+    catch (e) {
+    }
+
+
+
+</script>
+
+
+
+<script type="text/javascript" language="javascript">
+    //script added to avoid error on click of the menu to select
+    try {
+        Sys.WebForms.PageRequestManager.getInstance().add_endRequest(EndRequestHandler);
+        function EndRequestHandler(sender, args) {
+            if (args.get_error() != undefined) {
+                args.set_errorHandled(true);
+            }
+
+        }
+    }
+    catch (ee1) {
+    }
+
+</script>
+
+<script type="text/javascript">
+
+    function ShowPopup(calfrm) {
+
+        if (calfrm == "close") {
+            //$('#dvModal').hide();
+            $('#slide-bottom-popup').hide();
+        }
+        else {
+            //$('#dvModal').show();
+            $('#slide-bottom-popup').show();
+        }
+    }
+
+</script>
+
+
+<script src='navbar_files/jquery.popmenu.js'></script>
+
+<script type="text/javascript">
+    $(function () {
+        $('#demo_box').popmenu({
+            controller: true,
+            width: '100%',
+            //background: '#0A5A8D',
+            background: '#e9ecef',
+            focusColor: '#e9ecef',
+            borderRadius: '10px',
+            //top: '-239px',
+            top: '-188px',
+            FramLeftsize: '3px',
+            iconSizeWidth: '100%',
+            iconfontSize: '17px',
+            color: '#212529',
+            textalign: 'left',
+            framePad: '10px',
+            ListMargBtm: '15px'
+        });
+    });
+</script>
+</html>
