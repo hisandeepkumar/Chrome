@@ -29,19 +29,12 @@ os.makedirs(ICON_DIR, exist_ok=True)
 os.makedirs(PWA_ICON_DIR, exist_ok=True)
 
 # ---------- Flask + SocketIO ----------
+# ---------- Flask + SocketIO ----------
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = 'secret!'
 
-# Try to use eventlet, else fallback to threading
-try:
-    import eventlet
-    async_mode = 'eventlet'
-    print("✅ Using eventlet for WebSocket")
-except ImportError:
-    async_mode = 'threading'
-    print("⚠️ eventlet not found, using threading (WebSocket may not work)")
-
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode=async_mode)
+# Always use threading mode (no extra dependencies, works in exe)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 PORT = 5000
 
 # ---------- Generate PWA Icons ----------
