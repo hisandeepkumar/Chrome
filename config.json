@@ -1,0 +1,8 @@
+{
+    "apps": [
+        {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "📝"},
+        {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "🧮"},
+        {"id": "explorer", "name": "File Explorer", "path": "explorer.exe", "icon": "📁"},
+        {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "⌨️"}
+    ]
+}
