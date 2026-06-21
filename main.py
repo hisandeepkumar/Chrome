@@ -43,7 +43,7 @@ def generate_pwa_icons():
             img.save(path)
 generate_pwa_icons()
 
-# ---------- Default Apps (अब और भी Useful Shortcuts) ----------
+# ---------- Default Apps (with new useful shortcuts) ----------
 DEFAULT_APPS = [
     # Web Apps
     {"id": "whatsapp", "name": "WhatsApp", "path": "https://web.whatsapp.com", "icon": "💬"},
@@ -59,11 +59,11 @@ DEFAULT_APPS = [
     {"id": "display", "name": "Display", "path": "ms-settings:display", "icon": "🖥️"},
     {"id": "sound", "name": "Sound", "path": "ms-settings:sound", "icon": "🔊"},
     
-    # Volume Control (Direct)
+    # Volume Control
     {"id": "volup", "name": "Volume +", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]175)", "icon": "🔊+"},
     {"id": "voldown", "name": "Volume -", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]174)", "icon": "🔊-"},
     
-    # Brightness Control (Direct via PowerShell)
+    # Brightness Control (requires admin for some systems)
     {"id": "brightup", "name": "Brightness +", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,100)", "icon": "☀️+"},
     {"id": "brightdown", "name": "Brightness -", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,50)", "icon": "☀️-"},
     
@@ -102,8 +102,11 @@ def load_config():
         return {"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
+        # Ensure settings and apps exist
         if 'settings' not in data:
             data['settings'] = DEFAULT_SETTINGS
+        if 'apps' not in data or not data['apps']:
+            data['apps'] = DEFAULT_APPS
         return data
 
 def save_config(data):
@@ -194,6 +197,7 @@ def reorder_apps():
     for app_id in new_order:
         if app_id in app_map:
             reordered.append(app_map[app_id])
+    # Add any missing ones (just in case)
     for app in config_data['apps']:
         if app not in reordered:
             reordered.append(app)
