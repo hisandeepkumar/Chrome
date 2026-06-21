@@ -14,7 +14,7 @@ from io import BytesIO
 from zeroconf import ServiceInfo, Zeroconf
 from PIL import Image, ImageDraw, ImageFont
 
-# ---------- User Data ----------
+# ---------- User Data Directory ----------
 APPDATA = os.path.expandvars('%APPDATA%')
 USER_DIR = os.path.join(APPDATA, 'WinLauncher')
 ICON_DIR = os.path.join(USER_DIR, 'icons')
@@ -43,7 +43,7 @@ def generate_pwa_icons():
             img.save(path)
 generate_pwa_icons()
 
-# ---------- Default Apps (with new useful shortcuts) ----------
+# ---------- Default Apps (अब सारे Useful Shortcuts) ----------
 DEFAULT_APPS = [
     # Web Apps
     {"id": "whatsapp", "name": "WhatsApp", "path": "https://web.whatsapp.com", "icon": "💬"},
@@ -63,7 +63,7 @@ DEFAULT_APPS = [
     {"id": "volup", "name": "Volume +", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]175)", "icon": "🔊+"},
     {"id": "voldown", "name": "Volume -", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]174)", "icon": "🔊-"},
     
-    # Brightness Control (requires admin for some systems)
+    # Brightness Control
     {"id": "brightup", "name": "Brightness +", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,100)", "icon": "☀️+"},
     {"id": "brightdown", "name": "Brightness -", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,50)", "icon": "☀️-"},
     
@@ -97,17 +97,34 @@ DEFAULT_SETTINGS = {
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
+        # नया config बनाएँ
         with open(CONFIG_FILE, 'w') as f:
             json.dump({"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}, f, indent=4)
         return {"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}
+    
+    # अगर config पहले से है, तो उसे Load करें
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
-        # Ensure settings and apps exist
-        if 'settings' not in data:
-            data['settings'] = DEFAULT_SETTINGS
-        if 'apps' not in data or not data['apps']:
-            data['apps'] = DEFAULT_APPS
-        return data
+    
+    # सुनिश्चित करें कि settings मौजूद है
+    if 'settings' not in data:
+        data['settings'] = DEFAULT_SETTINGS
+    
+    # नए Default Apps को मर्ज करें (जो पहले से नहीं हैं)
+    existing_ids = {app['id'] for app in data.get('apps', [])}
+    for default_app in DEFAULT_APPS:
+        if default_app['id'] not in existing_ids:
+            data['apps'].append(default_app)
+    
+    # अगर apps बिल्कुल ही नहीं है तो Default सेट करें
+    if 'apps' not in data or not data['apps']:
+        data['apps'] = DEFAULT_APPS
+    
+    # Save back (ताकि नए apps सेव हो जाएँ)
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
+    
+    return data
 
 def save_config(data):
     with open(CONFIG_FILE, 'w') as f:
@@ -197,7 +214,7 @@ def reorder_apps():
     for app_id in new_order:
         if app_id in app_map:
             reordered.append(app_map[app_id])
-    # Add any missing ones (just in case)
+    # अगर कोई app छूट गया तो उसे अंत में जोड़ें
     for app in config_data['apps']:
         if app not in reordered:
             reordered.append(app)
@@ -218,7 +235,9 @@ def launch_app(app_id):
                 elif path.startswith('taskkill'):
                     subprocess.Popen(path, shell=True, creationflags=0x08000000)
                 elif path.startswith('powershell'):
-                    subprocess.Popen(['powershell', '-Command', path[10:]], shell=True)
+                    # Remove 'powershell -c ' part and pass rest
+                    cmd = path[11:].strip()  # Remove 'powershell -c '
+                    subprocess.Popen(['powershell', '-Command', cmd], shell=True)
                 elif path.startswith('rundll32'):
                     subprocess.Popen(path, shell=True)
                 else:
