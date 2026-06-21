@@ -4,11 +4,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('closeEdit').onclick = closeEditView;
     document.getElementById('closeModal').onclick = closeModal;
     document.getElementById('saveAppBtn').onclick = saveApp;
+    document.getElementById('trackpadToggle').onclick = toggleTrackpad;
     window.onclick = (e) => {
         if (e.target === document.getElementById('addModal')) closeModal();
         if (e.target === document.getElementById('editView')) closeEditView();
     };
 
+    // Service Worker for PWA
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/static/sw.js')
             .then(() => console.log('✅ SW Registered'))
@@ -17,7 +19,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 let appsData = [];
+let trackpadActive = false;
+let canvas, ctx;
+let points = [];
+let lastTime = 0;
+let animationId = null;
 
+// ---------- Fetch Apps ----------
 async function fetchApps() {
     try {
         const res = await fetch('/api/apps');
@@ -37,9 +45,7 @@ function renderMainGrid(apps) {
         card.className = 'app-card';
         card.dataset.id = app.id;
 
-        // Icon (image or emoji)
         let iconHtml = `<span class="icon">${app.icon || '📦'}</span>`;
-        // Check custom icon existence via HEAD
         fetch(`/user-icons/${app.id}.png`, { method: 'HEAD' })
             .then(res => {
                 if (res.ok) {
@@ -63,22 +69,17 @@ function renderMainGrid(apps) {
     grid.appendChild(editBtn);
 }
 
-// ---------- Launch ----------
+// ---------- Launch App (No Popup) ----------
 async function launchApp(id) {
     try {
-        const res = await fetch(`/api/launch/${id}`);
-        const data = await res.json();
-        if (data.status === 'launched') {
-            alert(`✅ ${data.name || 'App'} launched on PC!`);
-        } else {
-            alert('❌ Failed to launch.');
-        }
+        await fetch(`/api/launch/${id}`);
+        // No alert, silent launch
     } catch (e) {
-        alert('Network error.');
+        // Silent error - you can show a small toast if needed, but user said remove popup
     }
 }
 
-// ---------- Edit View ----------
+// ---------- Edit View (unchanged) ----------
 function openEditView() {
     document.getElementById('editView').style.display = 'flex';
     renderEditList(appsData);
@@ -194,7 +195,7 @@ async function deleteApp(id) {
     }
 }
 
-// ---------- Modal ----------
+// ---------- Modal (unchanged) ----------
 function openModal(appId) {
     const modal = document.getElementById('addModal');
     modal.style.display = 'flex';
@@ -269,7 +270,6 @@ async function saveApp() {
     formData.append('path', path);
     if (editId) {
         formData.append('edit_id', editId);
-        // retain icon emoji if not uploading file
         if (!file) {
             const existing = appsData.find(a => a.id === editId);
             formData.append('icon', existing ? existing.icon : '📦');
@@ -299,4 +299,145 @@ async function saveApp() {
     } catch (e) {
         document.getElementById('modalMsg').innerText = '❌ Connection error!';
     }
+}
+
+// ---------- Trackpad Mode ----------
+function toggleTrackpad() {
+    trackpadActive = !trackpadActive;
+    const canvas = document.getElementById('trackpadCanvas');
+    const btn = document.getElementById('trackpadToggle');
+    const mainView = document.getElementById('mainView');
+    const editBtn = document.querySelector('.edit-grid-btn'); // not needed
+
+    if (trackpadActive) {
+        // Show canvas, hide main view
+        canvas.style.display = 'block';
+        mainView.style.display = 'none';
+        btn.textContent = '✕ Close Trackpad';
+        btn.classList.add('active');
+        // Setup canvas
+        setupTrackpad();
+    } else {
+        // Hide canvas, show main view
+        canvas.style.display = 'none';
+        mainView.style.display = 'block';
+        btn.textContent = '🖱️ Trackpad';
+        btn.classList.remove('active');
+        // Clear trail
+        points = [];
+        if (animationId) cancelAnimationFrame(animationId);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Remove event listeners? We'll just stop animation
+    }
+}
+
+function setupTrackpad() {
+    canvas = document.getElementById('trackpadCanvas');
+    ctx = canvas.getContext('2d');
+    resizeCanvas();
+
+    // Clear points
+    points = [];
+
+    // Mouse events
+    canvas.addEventListener('mousemove', onTrackpadMove);
+    canvas.addEventListener('mouseleave', onTrackpadLeave);
+    // Touch events
+    canvas.addEventListener('touchmove', onTrackpadTouchMove, { passive: false });
+    canvas.addEventListener('touchend', onTrackpadTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', onTrackpadTouchEnd, { passive: false });
+
+    // Start animation loop
+    if (animationId) cancelAnimationFrame(animationId);
+    animateTrail();
+
+    window.addEventListener('resize', resizeCanvas);
+}
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+
+// Store points with timestamp
+function addPoint(x, y) {
+    points.push({ x, y, time: performance.now() });
+    // Limit points to avoid memory issues
+    if (points.length > 300) points.shift();
+}
+
+// Mouse
+function onTrackpadMove(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    addPoint(x, y);
+}
+
+function onTrackpadLeave() {
+    // No new points, but we keep existing ones to fade out
+}
+
+// Touch
+function onTrackpadTouchMove(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    if (touch) {
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        addPoint(x, y);
+    }
+}
+
+function onTrackpadTouchEnd() {
+    // Stop adding points, trail will fade
+}
+
+// Animation loop
+function animateTrail() {
+    const now = performance.now();
+    // Remove points older than 20ms
+    const cutoff = now - 20;
+    points = points.filter(p => p.time > cutoff);
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw trail
+    if (points.length > 1) {
+        // Draw glowing circles
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            const age = now - p.time;
+            const alpha = Math.max(0, 1 - age / 20); // fade out over 20ms
+            const radius = 8 + (1 - alpha) * 12; // shrink as it fades
+            const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+            gradient.addColorStop(0, `rgba(100, 200, 255, ${alpha * 0.9})`);
+            gradient.addColorStop(0.5, `rgba(50, 150, 255, ${alpha * 0.6})`);
+            gradient.addColorStop(1, `rgba(0, 50, 150, 0)`);
+            ctx.shadowColor = 'rgba(100, 200, 255, 0.5)';
+            ctx.shadowBlur = 25;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+        }
+        // Draw a brighter core point for the latest position
+        if (points.length > 0) {
+            const latest = points[points.length - 1];
+            const alpha = Math.min(1, (now - latest.time) / 10);
+            ctx.shadowBlur = 30;
+            ctx.shadowColor = 'rgba(150, 220, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(latest.x, latest.y, 6 * alpha, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(200, 240, 255, ${alpha * 0.8})`;
+            ctx.fill();
+        }
+    }
+
+    // Reset shadow to avoid affecting other drawings
+    ctx.shadowBlur = 0;
+
+    animationId = requestAnimationFrame(animateTrail);
 }
