@@ -1,13 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
     fetchApps();
     fetchSettings();
-    initSocket();
-    initTrackpad();
     initFullscreen();
     initGridSettings();
     initEditView();
     initAddModal();
-    // Page swipe detection
     setupSwipeDetection();
 });
 
@@ -15,10 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
 let appsData = [];
 let settings = {};
 let currentPage = 0;
-let totalPages = 0;
-let socket = null;
-let trackpadActive = false;
-let canvas, ctx, points = [], animationId;
 
 // ---------- Fetch Apps & Settings ----------
 async function fetchApps() {
@@ -26,7 +19,9 @@ async function fetchApps() {
         const res = await fetch('/api/apps');
         appsData = await res.json();
         renderPages(appsData);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 async function fetchSettings() {
@@ -34,7 +29,9 @@ async function fetchSettings() {
         const res = await fetch('/api/settings');
         settings = await res.json();
         applySettings();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 // ---------- Render Pages (with pagination) ----------
@@ -45,16 +42,12 @@ function renderPages(apps) {
     const rows = getRows();
     const itemsPerPage = cols * rows;
     const totalPages = Math.ceil(apps.length / itemsPerPage) || 1;
-    // Also add edit button as last item on last page? We'll put edit as separate button.
-    // We'll just display apps, edit is separate.
     for (let p = 0; p < totalPages; p++) {
         const page = document.createElement('div');
         page.className = 'page';
         page.dataset.page = p;
-        // Set grid template columns/rows dynamically via CSS
         page.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
         page.style.gridTemplateRows = `repeat(${rows}, auto)`;
-        // Get apps for this page
         const pageApps = apps.slice(p * itemsPerPage, (p + 1) * itemsPerPage);
         pageApps.forEach(app => {
             const card = createAppCard(app);
@@ -62,9 +55,7 @@ function renderPages(apps) {
         });
         container.appendChild(page);
     }
-    // Update indicators
     updateIndicators(totalPages);
-    // Scroll to first page
     container.scrollLeft = 0;
     currentPage = 0;
 }
@@ -112,10 +103,8 @@ function updateIndicators(total) {
 
 function applySettings() {
     const g = settings.grid || {};
-    // Apply icon size and glow via CSS variables
     document.documentElement.style.setProperty('--icon-size', (g.icon_size || 64) + 'px');
     document.documentElement.style.setProperty('--glow-size', (g.glow_size || 20) + 'px');
-    // Background
     if (g.bg_type === 'color') {
         document.body.style.background = g.bg_value || '#000000';
         document.body.style.backgroundImage = '';
@@ -130,7 +119,6 @@ function applySettings() {
             document.body.style.backgroundPosition = 'center';
         }
     } else if (g.bg_type === 'video') {
-        // Video background: we'll embed a video element
         let video = document.getElementById('bgVideo');
         if (!video) {
             video = document.createElement('video');
@@ -152,9 +140,7 @@ function applySettings() {
             video.play().catch(() => {});
         }
     }
-    // Blur
     document.body.style.backdropFilter = `blur(${g.blur || 0}px)`;
-    // Also apply to pages?
     document.querySelectorAll('.page').forEach(p => {
         p.style.backdropFilter = `blur(${g.blur || 0}px)`;
     });
@@ -175,7 +161,6 @@ function setupSwipeDetection() {
         const touch = e.touches[0];
         const dx = touch.clientX - startX;
         const dy = touch.clientY - startY;
-        // If horizontal swipe is dominant, prevent vertical scroll
         if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
             e.preventDefault();
         }
@@ -200,7 +185,6 @@ function setupSwipeDetection() {
         }
     }, { passive: true });
 
-    // Mouse wheel for desktop (if not trackpad)
     container.addEventListener('wheel', (e) => {
         if (e.deltaX !== 0) {
             e.preventDefault();
@@ -217,7 +201,6 @@ function setupSwipeDetection() {
         }
     }, { passive: false });
 
-    // Update active dot on scroll end
     container.addEventListener('scroll', () => {
         const pageWidth = container.clientWidth;
         const newPage = Math.round(container.scrollLeft / pageWidth);
@@ -240,172 +223,6 @@ async function launchApp(id) {
     try {
         await fetch(`/api/launch/${id}`);
     } catch (e) {}
-}
-
-// ---------- Socket.IO for Trackpad ----------
-function initSocket() {
-    socket = io();
-    socket.on('connect', () => console.log('Socket connected'));
-}
-
-// ---------- Trackpad ----------
-function initTrackpad() {
-    const btn = document.getElementById('trackpadToggle');
-    btn.addEventListener('click', toggleTrackpad);
-    canvas = document.getElementById('trackpadCanvas');
-    ctx = canvas.getContext('2d');
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-    // Mouse events
-    canvas.addEventListener('mousemove', onTrackpadMove);
-    canvas.addEventListener('mousedown', onTrackpadMouseDown);
-    canvas.addEventListener('mouseup', onTrackpadMouseUp);
-    canvas.addEventListener('wheel', onTrackpadWheel);
-    // Touch events
-    canvas.addEventListener('touchstart', onTrackpadTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', onTrackpadTouchMove, { passive: false });
-    canvas.addEventListener('touchend', onTrackpadTouchEnd, { passive: false });
-}
-
-let isPointerDown = false;
-
-function resizeCanvas() {
-    if (canvas) {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-}
-
-function toggleTrackpad() {
-    trackpadActive = !trackpadActive;
-    const btn = document.getElementById('trackpadToggle');
-    const mainView = document.getElementById('mainView');
-    if (trackpadActive) {
-        canvas.style.display = 'block';
-        mainView.style.display = 'none';
-        btn.textContent = '✕ Close Trackpad';
-        btn.classList.add('active');
-        points = [];
-        if (animationId) cancelAnimationFrame(animationId);
-        animateTrail();
-    } else {
-        canvas.style.display = 'none';
-        mainView.style.display = 'block';
-        btn.textContent = '🖱️ Trackpad';
-        btn.classList.remove('active');
-        points = [];
-        if (animationId) cancelAnimationFrame(animationId);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-}
-
-// Trackpad events
-function onTrackpadMove(e) {
-    if (!trackpadActive) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    // Send to server (absolute screen coords)
-    if (socket && socket.connected) {
-        socket.emit('trackpad_move', { x: x, y: y });
-    }
-    addPoint(x, y);
-}
-
-function onTrackpadMouseDown(e) {
-    if (!trackpadActive) return;
-    isPointerDown = true;
-    const btn = e.button === 2 ? 'right' : 'left';
-    if (socket && socket.connected) {
-        socket.emit('trackpad_click', { button: btn });
-    }
-}
-
-function onTrackpadMouseUp(e) {
-    isPointerDown = false;
-}
-
-function onTrackpadWheel(e) {
-    if (!trackpadActive) return;
-    e.preventDefault();
-    if (socket && socket.connected) {
-        socket.emit('trackpad_scroll', { deltaY: e.deltaY });
-    }
-}
-
-function onTrackpadTouchStart(e) {
-    e.preventDefault();
-    const touch = e.touches[0];
-    if (!touch) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    if (socket && socket.connected) {
-        socket.emit('trackpad_move', { x: x, y: y });
-    }
-    addPoint(x, y);
-    // Simulate left click on touch start? Usually tap to click.
-    if (socket && socket.connected) {
-        socket.emit('trackpad_click', { button: 'left' });
-    }
-}
-
-function onTrackpadTouchMove(e) {
-    e.preventDefault();
-    const touch = e.touches[0];
-    if (!touch) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    if (socket && socket.connected) {
-        socket.emit('trackpad_move', { x: x, y: y });
-    }
-    addPoint(x, y);
-}
-
-function onTrackpadTouchEnd(e) {
-    // Do nothing
-}
-
-// Trail functions
-function addPoint(x, y) {
-    points.push({ x, y, time: performance.now() });
-    if (points.length > 300) points.shift();
-}
-
-function animateTrail() {
-    const now = performance.now();
-    const cutoff = now - 20;
-    points = points.filter(p => p.time > cutoff);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (points.length > 1) {
-        for (let i = 0; i < points.length; i++) {
-            const p = points[i];
-            const age = now - p.time;
-            const alpha = Math.max(0, 1 - age / 20);
-            const radius = 8 + (1 - alpha) * 12;
-            const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
-            gradient.addColorStop(0, `rgba(100, 200, 255, ${alpha * 0.9})`);
-            gradient.addColorStop(0.5, `rgba(50, 150, 255, ${alpha * 0.6})`);
-            gradient.addColorStop(1, 'rgba(0, 50, 150, 0)');
-            ctx.shadowColor = 'rgba(100, 200, 255, 0.5)';
-            ctx.shadowBlur = 25;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-            ctx.fillStyle = gradient;
-            ctx.fill();
-        }
-        const latest = points[points.length - 1];
-        const alpha = Math.min(1, (now - latest.time) / 10);
-        ctx.shadowBlur = 30;
-        ctx.shadowColor = 'rgba(150, 220, 255, 0.8)';
-        ctx.beginPath();
-        ctx.arc(latest.x, latest.y, 6 * alpha, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(200, 240, 255, ${alpha * 0.8})`;
-        ctx.fill();
-    }
-    ctx.shadowBlur = 0;
-    animationId = requestAnimationFrame(animateTrail);
 }
 
 // ---------- Fullscreen ----------
@@ -432,7 +249,6 @@ function initGridSettings() {
     const save = document.getElementById('saveSettingsBtn');
 
     btn.addEventListener('click', () => {
-        // Load current settings into form
         const g = settings.grid || {};
         document.getElementById('portraitCols').value = g.portrait_cols || 3;
         document.getElementById('portraitRows').value = g.portrait_rows || 4;
@@ -461,7 +277,6 @@ function initGridSettings() {
         if (e.target === modal) modal.style.display = 'none';
     });
 
-    // Slider value display
     document.getElementById('iconSize').addEventListener('input', function() {
         document.getElementById('iconSizeVal').textContent = this.value;
     });
@@ -472,7 +287,6 @@ function initGridSettings() {
         document.getElementById('bgBlurVal').textContent = this.value;
     });
 
-    // Background type change
     document.getElementById('bgType').addEventListener('change', function() {
         if (this.value === 'color') {
             document.getElementById('bgColorGroup').style.display = 'block';
@@ -499,9 +313,6 @@ function initGridSettings() {
             const fileInput = document.getElementById('bgFile');
             if (fileInput.files.length > 0) {
                 const file = fileInput.files[0];
-                // Convert to base64 or upload to server? For simplicity, we'll store as data URL in settings.
-                // But for large files, better to upload to server and store path.
-                // We'll use FileReader to get data URL and store in settings (may be large but okay for demo)
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     bgValue = e.target.result;
@@ -517,9 +328,9 @@ function initGridSettings() {
                     saveSettingsToServer();
                 };
                 reader.readAsDataURL(file);
-                return; // wait for async
+                return;
             } else {
-                bgValue = settings.grid.bg_value || ''; // keep old
+                bgValue = settings.grid.bg_value || '';
             }
         }
         settings.grid = {
@@ -547,7 +358,7 @@ async function saveSettingsToServer() {
         });
         if (res.ok) {
             applySettings();
-            renderPages(appsData); // re-render with new grid
+            renderPages(appsData);
         } else {
             document.getElementById('settingsMsg').textContent = '❌ Failed to save settings';
         }
@@ -556,7 +367,7 @@ async function saveSettingsToServer() {
     }
 }
 
-// ---------- Edit View (same as before) ----------
+// ---------- Edit View ----------
 function initEditView() {
     const editBtn = document.getElementById('editBtn');
     const closeEdit = document.getElementById('closeEdit');
