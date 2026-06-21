@@ -23,7 +23,7 @@ PWA_ICON_DIR = os.path.join(USER_DIR, 'pwa')
 os.makedirs(ICON_DIR, exist_ok=True)
 os.makedirs(PWA_ICON_DIR, exist_ok=True)
 
-# ---------- Flask Setup (No SocketIO) ----------
+# ---------- Flask Setup ----------
 app = Flask(__name__, static_folder='static', template_folder='templates')
 PORT = 5000
 
@@ -43,23 +43,42 @@ def generate_pwa_icons():
             img.save(path)
 generate_pwa_icons()
 
-# ---------- Default Apps ----------
+# ---------- Default Apps (अब और भी Useful Shortcuts) ----------
 DEFAULT_APPS = [
+    # Web Apps
     {"id": "whatsapp", "name": "WhatsApp", "path": "https://web.whatsapp.com", "icon": "💬"},
     {"id": "youtube", "name": "YouTube", "path": "https://youtube.com", "icon": "▶️"},
     {"id": "deepseek", "name": "DeepSeek", "path": "https://chat.deepseek.com", "icon": "🤖"},
     {"id": "chatgpt", "name": "ChatGPT", "path": "https://chatgpt.com", "icon": "✨"},
     {"id": "gmail", "name": "Gmail", "path": "https://gmail.com", "icon": "📧"},
     {"id": "newtab", "name": "New Tab", "path": "about:blank", "icon": "➕"},
+    
+    # System Settings
     {"id": "wifi", "name": "WiFi", "path": "ms-settings:network-wifi", "icon": "📶"},
     {"id": "bluetooth", "name": "Bluetooth", "path": "ms-settings:bluetooth", "icon": "📳"},
-    {"id": "volume", "name": "Volume", "path": "ms-settings:sound", "icon": "🔊"},
-    {"id": "brightness", "name": "Brightness", "path": "ms-settings:display", "icon": "☀️"},
-    {"id": "closeall", "name": "Close Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"},
+    {"id": "display", "name": "Display", "path": "ms-settings:display", "icon": "🖥️"},
+    {"id": "sound", "name": "Sound", "path": "ms-settings:sound", "icon": "🔊"},
+    
+    # Volume Control (Direct)
+    {"id": "volup", "name": "Volume +", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]175)", "icon": "🔊+"},
+    {"id": "voldown", "name": "Volume -", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]174)", "icon": "🔊-"},
+    
+    # Brightness Control (Direct via PowerShell)
+    {"id": "brightup", "name": "Brightness +", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,100)", "icon": "☀️+"},
+    {"id": "brightdown", "name": "Brightness -", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,50)", "icon": "☀️-"},
+    
+    # Utility
+    {"id": "lockpc", "name": "Lock PC", "path": "rundll32.exe user32.dll,LockWorkStation", "icon": "🔒"},
+    {"id": "taskmgr", "name": "Task Manager", "path": "taskmgr.exe", "icon": "⚙️"},
+    {"id": "snipping", "name": "Snipping Tool", "path": "SnippingTool.exe", "icon": "✂️"},
+    {"id": "control", "name": "Control Panel", "path": "control.exe", "icon": "📟"},
+    
+    # Common Apps
     {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "📝"},
     {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "🧮"},
     {"id": "explorer", "name": "Explorer", "path": "explorer.exe", "icon": "📁"},
-    {"id": "cmd", "name": "Command", "path": "cmd.exe", "icon": "⌨️"}
+    {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "⌨️"},
+    {"id": "closeall", "name": "Close Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"}
 ]
 
 DEFAULT_SETTINGS = {
@@ -167,6 +186,21 @@ def delete_app(app_id):
     save_config(config_data)
     return jsonify({"status": "deleted"})
 
+@app.route('/api/reorder', methods=['POST'])
+def reorder_apps():
+    new_order = request.json.get('order', [])
+    app_map = {app['id']: app for app in config_data['apps']}
+    reordered = []
+    for app_id in new_order:
+        if app_id in app_map:
+            reordered.append(app_map[app_id])
+    for app in config_data['apps']:
+        if app not in reordered:
+            reordered.append(app)
+    config_data['apps'] = reordered
+    save_config(config_data)
+    return jsonify({"status": "ok"})
+
 @app.route('/api/launch/<app_id>', methods=['GET'])
 def launch_app(app_id):
     for app in config_data['apps']:
@@ -179,6 +213,10 @@ def launch_app(app_id):
                     subprocess.Popen(['start', path], shell=True)
                 elif path.startswith('taskkill'):
                     subprocess.Popen(path, shell=True, creationflags=0x08000000)
+                elif path.startswith('powershell'):
+                    subprocess.Popen(['powershell', '-Command', path[10:]], shell=True)
+                elif path.startswith('rundll32'):
+                    subprocess.Popen(path, shell=True)
                 else:
                     subprocess.Popen(f'"{path}"', shell=True)
                 return jsonify({"status": "launched"})
