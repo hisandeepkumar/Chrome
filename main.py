@@ -4,6 +4,7 @@ import threading
 import json
 import os
 import subprocess
+import uuid
 from flask import Flask, request, render_template, jsonify, send_from_directory
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget
 from PyQt5.QtCore import Qt
@@ -11,25 +12,59 @@ from PyQt5.QtGui import QPixmap
 import qrcode
 from io import BytesIO
 from zeroconf import ServiceInfo, Zeroconf
+from PIL import Image, ImageDraw, ImageFont
 
 # ---------- Flask Setup ----------
 app = Flask(__name__, static_folder='static', template_folder='templates')
 PORT = 5000
 CONFIG_FILE = 'config.json'
+ICON_FOLDER = 'static/icons'
+os.makedirs(ICON_FOLDER, exist_ok=True)
+os.makedirs('static', exist_ok=True)
+
+# ---------- Generate Default PWA Icons (if missing) ----------
+def generate_default_pwa_icons():
+    sizes = [192, 512]
+    for size in sizes:
+        path = f'static/icon-{size}.png'
+        if not os.path.exists(path):
+            img = Image.new('RGB', (size, size), color='#1c1c1e')
+            d = ImageDraw.Draw(img)
+            try:
+                # Try to use a bold font
+                font = ImageFont.truetype("arial.ttf", size//2)
+            except:
+                font = ImageFont.load_default()
+            d.text((size//2, size//2), "🚀", fill='white', anchor="mm", font=font, align="center")
+            img.save(path)
+            print(f"✅ Generated default PWA icon: {path}")
+
+generate_default_pwa_icons()
+
+# ---------- Default Apps (Websites + System Settings + Common) ----------
+DEFAULT_APPS = [
+    {"id": "whatsapp", "name": "WhatsApp Web", "path": "https://web.whatsapp.com", "icon": "💬"},
+    {"id": "youtube", "name": "YouTube", "path": "https://youtube.com", "icon": "▶️"},
+    {"id": "deepseek", "name": "DeepSeek Chat", "path": "https://chat.deepseek.com", "icon": "🤖"},
+    {"id": "chatgpt", "name": "ChatGPT", "path": "https://chatgpt.com", "icon": "✨"},
+    {"id": "gmail", "name": "Gmail", "path": "https://gmail.com", "icon": "📧"},
+    {"id": "newtab", "name": "New Tab", "path": "about:blank", "icon": "➕"},
+    {"id": "wifi", "name": "WiFi Settings", "path": "ms-settings:network-wifi", "icon": "📶"},
+    {"id": "bluetooth", "name": "Bluetooth", "path": "ms-settings:bluetooth", "icon": "📳"},
+    {"id": "volume", "name": "Sound Settings", "path": "ms-settings:sound", "icon": "🔊"},
+    {"id": "brightness", "name": "Display Settings", "path": "ms-settings:display", "icon": "☀️"},
+    {"id": "closeall", "name": "Close All Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"},
+    {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "📝"},
+    {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "🧮"},
+    {"id": "explorer", "name": "File Explorer", "path": "explorer.exe", "icon": "📁"},
+    {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "⌨️"}
+]
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        default = {
-            "apps": [
-                {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "📝"},
-                {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "🧮"},
-                {"id": "explorer", "name": "File Explorer", "path": "explorer.exe", "icon": "📁"},
-                {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "⌨️"}
-            ]
-        }
         with open(CONFIG_FILE, 'w') as f:
-            json.dump(default, f, indent=4)
-        return default
+            json.dump({"apps": DEFAULT_APPS}, f, indent=4)
+        return {"apps": DEFAULT_APPS}
     with open(CONFIG_FILE, 'r') as f:
         return json.load(f)
 
@@ -52,18 +87,76 @@ def send_static(path):
 def get_apps():
     return jsonify(config_data['apps'])
 
+@app.route('/api/reorder', methods=['POST'])
+def reorder_apps():
+    new_order = request.json.get('order', [])
+    app_map = {app['id']: app for app in config_data['apps']}
+    reordered = []
+    for app_id in new_order:
+        if app_id in app_map:
+            reordered.append(app_map[app_id])
+    # Add any missing ones (just in case)
+    for app in config_data['apps']:
+        if app not in reordered:
+            reordered.append(app)
+    config_data['apps'] = reordered
+    save_config(config_data)
+    return jsonify({"status": "ok"})
+
 @app.route('/api/apps', methods=['POST'])
 def add_app():
-    new_app = request.json
-    # Ensure unique ID
-    new_app['id'] = new_app['name'].lower().replace(' ', '_') + str(len(config_data['apps']))
-    config_data['apps'].append(new_app)
-    save_config(config_data)
-    return jsonify({"status": "added", "app": new_app})
+    # Check if multipart file is sent
+    if request.files:
+        name = request.form.get('name')
+        path = request.form.get('path')
+        icon_emoji = request.form.get('icon', '📦')
+        edit_id = request.form.get('edit_id')
+        file = request.files.get('icon_file')
+    else:
+        data = request.json
+        name = data.get('name')
+        path = data.get('path')
+        icon_emoji = data.get('icon', '📦')
+        edit_id = data.get('edit_id')
+        file = None
+
+    if not name or not path:
+        return jsonify({"status": "error", "msg": "Name and Path required"}), 400
+
+    if edit_id:
+        # Editing existing app
+        for app in config_data['apps']:
+            if app['id'] == edit_id:
+                app['name'] = name
+                app['path'] = path
+                app['icon'] = icon_emoji
+                if file and file.filename:
+                    file.save(f'{ICON_FOLDER}/{edit_id}.png')
+                save_config(config_data)
+                return jsonify({"status": "updated"})
+        return jsonify({"status": "not_found"}), 404
+    else:
+        # Adding new app
+        new_id = str(uuid.uuid4())[:8]
+        new_app = {
+            "id": new_id,
+            "name": name,
+            "path": path,
+            "icon": icon_emoji
+        }
+        config_data['apps'].append(new_app)
+        if file and file.filename:
+            file.save(f'{ICON_FOLDER}/{new_id}.png')
+        save_config(config_data)
+        return jsonify({"status": "added", "app": new_app})
 
 @app.route('/api/apps/<app_id>', methods=['DELETE'])
 def delete_app(app_id):
     config_data['apps'] = [a for a in config_data['apps'] if a['id'] != app_id]
+    # Delete custom icon if exists
+    icon_path = f'{ICON_FOLDER}/{app_id}.png'
+    if os.path.exists(icon_path):
+        os.remove(icon_path)
     save_config(config_data)
     return jsonify({"status": "deleted"})
 
@@ -73,21 +166,28 @@ def launch_app(app_id):
         if app['id'] == app_id:
             path = app['path']
             try:
-                # Handle paths with spaces
-                subprocess.Popen(f'"{path}"', shell=True)
+                # Handle URLs
+                if path.startswith('http') or path.startswith('https') or path.startswith('about:'):
+                    subprocess.Popen(['start', path], shell=True)
+                # Handle Windows Settings
+                elif path.startswith('ms-settings:'):
+                    subprocess.Popen(['start', path], shell=True)
+                # Handle taskkill (Close all browsers)
+                elif path.startswith('taskkill'):
+                    subprocess.Popen(path, shell=True, creationflags=0x08000000)  # Hidden window
+                else:
+                    subprocess.Popen(f'"{path}"', shell=True)
                 return jsonify({"status": "launched", "name": app['name']})
             except Exception as e:
                 return jsonify({"status": "error", "msg": str(e)}), 500
     return jsonify({"status": "not_found"}), 404
 
-# ---------- mDNS (Zeroconf) Setup ----------
+# ---------- mDNS (Zeroconf) ----------
 def register_mdns():
     zeroconf = Zeroconf()
     hostname = socket.gethostname()
     ip = socket.gethostbyname(hostname)
-    # Check if IP is private, else fallback
     if not ip.startswith('192.168.') and not ip.startswith('10.') and not ip.startswith('172.'):
-        # Try getting proper local IP
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             s.connect(('8.8.8.8', 80))
@@ -96,7 +196,6 @@ def register_mdns():
             pass
         finally:
             s.close()
-    
     info = ServiceInfo(
         "_http._tcp.local.",
         "WinLauncher._http._tcp.local.",
@@ -133,21 +232,22 @@ class QRWindow(QMainWindow):
         layout = QVBoxLayout(central)
         layout.setAlignment(Qt.AlignCenter)
         
-        # Info Label
-        label_info = QLabel("📱 Scan this QR with your phone\nor visit the URL below")
-        label_info.setStyleSheet("color: white; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 10px;")
+        label_info = QLabel("📱 Scan this QR with your phone")
+        label_info.setStyleSheet("color: white; font-size: 16px; font-weight: bold; text-align: center;")
         label_info.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_info)
         
-        # URL Label (mDNS)
-        url_mdns = "http://winlauncher.local:5000"
-        label_url = QLabel(f"🌐 {url_mdns}\n(Also works with Local IP)")
-        label_url.setStyleSheet("color: #aaa; font-size: 14px; text-align: center; margin-bottom: 20px;")
+        # Get Local IP for QR
+        local_ip = get_local_ip()
+        url = f"http://{local_ip}:{PORT}"
+        
+        label_url = QLabel(f"🌐 {url}")
+        label_url.setStyleSheet("color: #aaa; font-size: 14px; text-align: center; margin-bottom: 10px;")
         label_url.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_url)
         
-        # Generate QR Code for mDNS URL
-        qr_img = qrcode.make(url_mdns)
+        # Generate QR with Local IP
+        qr_img = qrcode.make(url)
         buffer = BytesIO()
         qr_img.save(buffer, format="PNG")
         pixmap = QPixmap()
@@ -158,12 +258,11 @@ class QRWindow(QMainWindow):
         label_qr.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_qr)
         
-        # Local IP Fallback
-        local_ip = get_local_ip()
-        label_ip = QLabel(f"📶 Local IP fallback: http://{local_ip}:5000")
-        label_ip.setStyleSheet("color: #888; font-size: 12px; text-align: center; margin-top: 20px;")
-        label_ip.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label_ip)
+        # Fallback mDNS text
+        label_mdns = QLabel(f"📶 Also try: http://winlauncher.local:{PORT}")
+        label_mdns.setStyleSheet("color: #888; font-size: 12px; text-align: center; margin-top: 15px;")
+        label_mdns.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label_mdns)
 
 # ---------- Flask Runner ----------
 def run_flask():
@@ -171,18 +270,13 @@ def run_flask():
 
 # ---------- Main ----------
 if __name__ == '__main__':
-    # Start Flask in background
     threading.Thread(target=run_flask, daemon=True).start()
-    
-    # Register mDNS
     zeroconf_instance = register_mdns()
     
-    # Start PyQt App
     qt_app = QApplication(sys.argv)
     window = QRWindow()
     window.show()
     
-    # Cleanup mDNS on exit
     def cleanup():
         zeroconf_instance.unregister_all_services()
         zeroconf_instance.close()
