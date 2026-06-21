@@ -17,41 +17,36 @@
             <p class="subtitle">Tap to launch</p>
         </header>
 
-        <!-- Main Grid View -->
+        <!-- Main Grid -->
         <div id="mainView">
             <div id="appGrid" class="grid">
-                <!-- Apps will be rendered here -->
-                <!-- Edit button will be appended as last item -->
+                <!-- Apps will be rendered here, last item is Edit button -->
             </div>
         </div>
 
-        <!-- Edit List View (Overlay) -->
+        <!-- Edit Overlay -->
         <div id="editView" class="edit-overlay" style="display:none;">
             <div class="edit-container glass">
                 <div class="edit-header">
                     <h2>✏️ Edit Shortcuts</h2>
                     <button id="closeEdit" class="close-btn">&times;</button>
                 </div>
-                <div id="editList" class="edit-list">
-                    <!-- List items will be rendered here -->
-                </div>
+                <div id="editList" class="edit-list"></div>
                 <div class="edit-footer">
-                    <button id="addMoreBtn" class="glass-btn primary">➕ Add More Shortcut</button>
+                    <button id="addMoreBtn" class="glass-btn primary">➕ Add More</button>
                 </div>
             </div>
         </div>
 
-        <!-- Modal for Add/Edit (Popup) -->
+        <!-- Modal for Add/Edit -->
         <div id="addModal" class="modal">
             <div class="modal-content glass">
                 <span class="close-btn" id="closeModal">&times;</span>
                 <h2 id="modalTitle">Edit Shortcut</h2>
                 <input type="hidden" id="editId" value="">
-                
-                <!-- Icon Upload -->
                 <div class="icon-upload-section">
-                    <div id="currentIconDisplay" class="current-icon">
-                        <!-- Will show emoji or image -->
+                    <div id="currentIconDisplay" class="current-icon glow">
+                        <!-- emoji or image -->
                     </div>
                     <label class="file-upload-label">
                         <span>🖼️ Change Icon</span>
@@ -59,16 +54,13 @@
                     </label>
                     <div id="iconPreview" class="icon-preview" style="display:none;"></div>
                 </div>
-
-                <input type="text" id="appName" placeholder="Shortcut Name">
+                <input type="text" id="appName" placeholder="Shortcut Name (optional)">
                 <input type="text" id="appPath" placeholder="Path / URL / Command">
                 <button id="saveAppBtn" class="glass-btn primary">Save</button>
                 <p id="modalMsg" style="color: #ff6b6b; margin-top: 10px;"></p>
             </div>
         </div>
-
     </div>
-
     <script src="/static/script.js"></script>
 </body>
 </html>
