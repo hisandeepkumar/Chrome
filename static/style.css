@@ -1,10 +1,10 @@
-* { margin:0; padding:0; box-sizing:border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 html, body {
-    width:100%; height:100%;
+    width: 100%; height: 100%;
     background: #000000;
     color: white;
     overflow: hidden;
-    touch-action: pan-y; /* allow vertical scroll only on pages? We'll handle */
+    touch-action: pan-y;
 }
 body {
     display: flex;
@@ -20,7 +20,6 @@ body {
     overflow: hidden;
 }
 
-/* App Container for pages */
 .app-container {
     width: 100%;
     height: 100%;
@@ -29,7 +28,6 @@ body {
     scroll-snap-type: x mandatory;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
-    /* Hide scrollbar */
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
@@ -44,10 +42,9 @@ body {
     padding: 20px;
     justify-items: center;
     align-content: center;
-    /* Background will be set via JS */
 }
 
-/* Grid items */
+/* ---------- App Card ---------- */
 .app-card {
     display: flex;
     flex-direction: column;
@@ -59,32 +56,42 @@ body {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
+    gap: 4px;
 }
 .app-card:hover { transform: scale(1.05); }
-.app-card .icon,
-.app-card .icon-img {
-    display: block;
-    border-radius: 16px;
-    object-fit: cover;
-    font-size: 3.2rem;
+
+/* Icon (Emoji) - आकार CSS Variable से */
+.app-card .icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--icon-size, 64px);
+    height: var(--icon-size, 64px);
+    font-size: calc(var(--icon-size, 64px) * 0.8);
     line-height: 1;
     text-align: center;
-    transition: box-shadow 0.3s;
+    filter: drop-shadow(0 0 var(--glow-size, 20px) rgba(255,255,255,0.2));
+    border-radius: 16px;
 }
+
+/* Icon (Image) - आकार CSS Variable से */
 .app-card .icon-img {
+    display: block;
+    width: var(--icon-size, 64px);
+    height: var(--icon-size, 64px);
+    border-radius: 16px;
+    object-fit: cover;
     box-shadow: 0 0 var(--glow-size, 20px) rgba(100,200,255,0.3);
     border: 2px solid rgba(255,255,255,0.1);
+    transition: box-shadow 0.3s;
 }
 .app-card .icon-img:hover {
-    box-shadow: 0 0 calc(var(--glow-size, 20px)*1.5) rgba(100,200,255,0.6);
+    box-shadow: 0 0 calc(var(--glow-size, 20px) * 1.5) rgba(100,200,255,0.6);
 }
-.app-card .icon {
-    filter: drop-shadow(0 0 var(--glow-size, 20px) rgba(255,255,255,0.2));
-}
+
 .app-card .name {
     font-size: 0.7rem;
     color: #aaa;
-    margin-top: 4px;
     max-width: 80px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -92,7 +99,7 @@ body {
 }
 .app-card .name:empty { display: none; }
 
-/* Page indicators */
+/* ---------- Page Indicators ---------- */
 .page-indicators {
     position: absolute;
     bottom: 80px;
@@ -112,7 +119,7 @@ body {
 }
 .page-indicators .dot.active { background: white; width: 20px; border-radius: 4px; }
 
-/* Action Buttons (bottom) */
+/* ---------- Action Buttons ---------- */
 .action-buttons {
     position: absolute;
     bottom: 20px;
@@ -139,28 +146,7 @@ body {
     transform: scale(1.05);
 }
 
-/* Trackpad Button */
-.trackpad-btn {
-    position: fixed;
-    bottom: 30px;
-    right: 30px;
-    background: rgba(255,255,255,0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.2);
-    color: white;
-    padding: 12px 20px;
-    border-radius: 40px;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    z-index: 100;
-    transition: 0.2s;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
-.trackpad-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
-.trackpad-btn.active { background: rgba(0,122,255,0.6); border-color: rgba(0,122,255,0.8); }
-
-/* Fullscreen Button */
+/* ---------- Fullscreen Button ---------- */
 .fullscreen-btn {
     position: fixed;
     top: 15px;
@@ -178,7 +164,7 @@ body {
 }
 .fullscreen-btn:hover { background: rgba(255,255,255,0.2); }
 
-/* Edit Overlay (same as before) */
+/* ---------- Edit Overlay (same as before) ---------- */
 .edit-overlay {
     position: fixed;
     top:0; left:0; width:100%; height:100%;
@@ -245,7 +231,7 @@ body {
 .edit-footer { margin-top:15px; display:flex; justify-content:center; }
 .edit-footer .glass-btn { width:100%; text-align:center; }
 
-/* Modal (Add/Edit and Settings) */
+/* ---------- Modal ---------- */
 .modal {
     display: none;
     position: fixed;
@@ -383,6 +369,5 @@ body {
 /* Responsive tweaks */
 @media (max-width: 500px) {
     .action-btn { padding:8px 14px; font-size:1rem; }
-    .trackpad-btn { bottom:20px; right:20px; padding:10px 16px; font-size:0.9rem; }
     .fullscreen-btn { top:10px; right:10px; font-size:1rem; padding:4px 10px; }
 }
