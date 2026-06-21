@@ -1,1 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>WinLauncher</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="stylesheet" href="/static/style.css">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1c1c1e">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 WinLauncher</h1>
+            <p class="subtitle">Tap to launch any app on your PC</p>
+        </header>
+        
+        <div class="actions">
+            <button id="addAppBtn" class="glass-btn">➕ Add Custom App</button>
+        </div>
 
+        <div id="appGrid" class="grid">
+            <!-- Apps will be rendered here -->
+        </div>
+    </div>
+
+    <!-- Modal for Adding App -->
+    <div id="addModal" class="modal">
+        <div class="modal-content glass">
+            <span class="close-btn" id="closeModal">&times;</span>
+            <h2>Add New Shortcut</h2>
+            <input type="text" id="appName" placeholder="App Name (e.g. Spotify)">
+            <input type="text" id="appPath" placeholder="Executable Path (e.g. C:\Program Files\Spotify\Spotify.exe)">
+            <input type="text" id="appIcon" placeholder="Emoji Icon (e.g. 🎵)" value="📦">
+            <button id="saveAppBtn" class="glass-btn primary">Save Shortcut</button>
+            <p id="modalMsg" style="color: #ff6b6b; margin-top: 10px;"></p>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
