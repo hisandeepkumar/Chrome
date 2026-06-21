@@ -6,7 +6,6 @@ import os
 import subprocess
 import uuid
 from flask import Flask, request, render_template, jsonify, send_from_directory
-from flask_socketio import SocketIO, emit
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
@@ -14,10 +13,6 @@ import qrcode
 from io import BytesIO
 from zeroconf import ServiceInfo, Zeroconf
 from PIL import Image, ImageDraw, ImageFont
-import pyautogui
-import base64
-import tempfile
-import time
 
 # ---------- User Data ----------
 APPDATA = os.path.expandvars('%APPDATA%')
@@ -28,13 +23,8 @@ PWA_ICON_DIR = os.path.join(USER_DIR, 'pwa')
 os.makedirs(ICON_DIR, exist_ok=True)
 os.makedirs(PWA_ICON_DIR, exist_ok=True)
 
-# ---------- Flask + SocketIO ----------
-# ---------- Flask + SocketIO ----------
+# ---------- Flask Setup (No SocketIO) ----------
 app = Flask(__name__, static_folder='static', template_folder='templates')
-app.config['SECRET_KEY'] = 'secret!'
-
-# Always use threading mode (no extra dependencies, works in exe)
-socketio = SocketIO(app, cors_allowed_origins="*")
 PORT = 5000
 
 # ---------- Generate PWA Icons ----------
@@ -145,7 +135,6 @@ def add_or_edit_app():
 
     if not path:
         return jsonify({"status": "error", "msg": "Path required"}), 400
-
     if not name:
         name = ""
 
@@ -196,45 +185,6 @@ def launch_app(app_id):
             except Exception as e:
                 return jsonify({"status": "error", "msg": str(e)}), 500
     return jsonify({"status": "not_found"}), 404
-
-# ---------- SocketIO Trackpad ----------
-@socketio.on('connect')
-def handle_connect():
-    print('Client connected')
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    print('Client disconnected')
-
-@socketio.on('trackpad_move')
-def handle_trackpad_move(data):
-    try:
-        x = data.get('x', 0)
-        y = data.get('y', 0)
-        pyautogui.moveTo(x, y)
-    except Exception as e:
-        print('Move error:', e)
-
-@socketio.on('trackpad_click')
-def handle_trackpad_click(data):
-    try:
-        btn = data.get('button', 'left')
-        if btn == 'left':
-            pyautogui.click()
-        elif btn == 'right':
-            pyautogui.rightClick()
-        elif btn == 'middle':
-            pyautogui.middleClick()
-    except Exception as e:
-        print('Click error:', e)
-
-@socketio.on('trackpad_scroll')
-def handle_trackpad_scroll(data):
-    try:
-        dy = data.get('deltaY', 0)
-        pyautogui.scroll(int(-dy))
-    except Exception as e:
-        print('Scroll error:', e)
 
 # ---------- mDNS ----------
 def register_mdns():
@@ -313,9 +263,11 @@ class QRWindow(QMainWindow):
         layout.addWidget(label_mdns)
 
 # ---------- Run ----------
+def run_flask():
+    app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
+
 if __name__ == '__main__':
-    # Start Flask + SocketIO server in background thread
-    threading.Thread(target=lambda: socketio.run(app, host='0.0.0.0', port=PORT, debug=False, use_reloader=False), daemon=True).start()
+    threading.Thread(target=run_flask, daemon=True).start()
     zeroconf = register_mdns()
 
     qt_app = QApplication(sys.argv)
