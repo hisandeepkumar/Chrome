@@ -34,7 +34,7 @@ async function fetchSettings() {
     }
 }
 
-// ---------- Render Pages (with pagination) ----------
+// ---------- Render Pages ----------
 function renderPages(apps) {
     const container = document.getElementById('appContainer');
     container.innerHTML = '';
@@ -103,7 +103,6 @@ function updateIndicators(total) {
 
 function applySettings() {
     const g = settings.grid || {};
-    // Apply CSS variables
     const iconSize = g.icon_size || 64;
     const glowSize = g.glow_size || 20;
     document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
@@ -145,7 +144,6 @@ function applySettings() {
             video.play().catch(() => {});
         }
     }
-    // Blur
     const blur = g.blur || 0;
     document.body.style.backdropFilter = `blur(${blur}px)`;
     document.querySelectorAll('.page').forEach(p => {
@@ -223,7 +221,7 @@ function updateActiveDot() {
     });
 }
 
-// ---------- Launch App (Silent) ----------
+// ---------- Launch App ----------
 async function launchApp(id) {
     try {
         await fetch(`/api/launch/${id}`);
