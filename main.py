@@ -31,7 +31,17 @@ os.makedirs(PWA_ICON_DIR, exist_ok=True)
 # ---------- Flask + SocketIO ----------
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+
+# Try to use eventlet, else fallback to threading
+try:
+    import eventlet
+    async_mode = 'eventlet'
+    print("✅ Using eventlet for WebSocket")
+except ImportError:
+    async_mode = 'threading'
+    print("⚠️ eventlet not found, using threading (WebSocket may not work)")
+
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode=async_mode)
 PORT = 5000
 
 # ---------- Generate PWA Icons ----------
@@ -90,7 +100,6 @@ def load_config():
         return {"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
-        # Ensure settings exist
         if 'settings' not in data:
             data['settings'] = DEFAULT_SETTINGS
         return data
@@ -209,12 +218,6 @@ def handle_trackpad_move(data):
     try:
         x = data.get('x', 0)
         y = data.get('y', 0)
-        # Move cursor relative to screen
-        screen_w, screen_h = pyautogui.size()
-        # x, y are in canvas coordinates (0-1 normalized?)
-        # We'll pass absolute pixel positions from canvas
-        # We'll send absolute screen coordinates from client
-        # So we just use them directly
         pyautogui.moveTo(x, y)
     except Exception as e:
         print('Move error:', e)
@@ -236,7 +239,7 @@ def handle_trackpad_click(data):
 def handle_trackpad_scroll(data):
     try:
         dy = data.get('deltaY', 0)
-        pyautogui.scroll(int(-dy))  # invert for natural scrolling
+        pyautogui.scroll(int(-dy))
     except Exception as e:
         print('Scroll error:', e)
 
@@ -318,6 +321,7 @@ class QRWindow(QMainWindow):
 
 # ---------- Run ----------
 if __name__ == '__main__':
+    # Start Flask + SocketIO server in background thread
     threading.Thread(target=lambda: socketio.run(app, host='0.0.0.0', port=PORT, debug=False, use_reloader=False), daemon=True).start()
     zeroconf = register_mdns()
 
