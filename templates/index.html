@@ -18,7 +18,8 @@
         </header>
         
         <div class="actions">
-            <button id="addAppBtn" class="glass-btn">➕ Add Custom App</button>
+            <button id="editToggle" class="glass-btn">✏️ Edit</button>
+            <button id="addAppBtn" class="glass-btn">➕ Add</button>
         </div>
 
         <div id="appGrid" class="grid">
@@ -26,14 +27,19 @@
         </div>
     </div>
 
-    <!-- Modal for Adding App -->
+    <!-- Modal for Add/Edit -->
     <div id="addModal" class="modal">
         <div class="modal-content glass">
             <span class="close-btn" id="closeModal">&times;</span>
-            <h2>Add New Shortcut</h2>
+            <h2 id="modalTitle">Add New Shortcut</h2>
+            <input type="hidden" id="editId" value="">
             <input type="text" id="appName" placeholder="App Name (e.g. Spotify)">
-            <input type="text" id="appPath" placeholder="Executable Path (e.g. C:\Program Files\Spotify\Spotify.exe)">
+            <input type="text" id="appPath" placeholder="Path / URL / Command (e.g. C:\...)">
             <input type="text" id="appIcon" placeholder="Emoji Icon (e.g. 🎵)" value="📦">
+            <div style="margin: 10px 0;">
+                <label style="color:#aaa; font-size:14px;">🖼️ Upload Custom Icon (PNG/JPG)</label>
+                <input type="file" id="iconFile" accept="image/png, image/jpeg, image/svg+xml">
+            </div>
             <button id="saveAppBtn" class="glass-btn primary">Save Shortcut</button>
             <p id="modalMsg" style="color: #ff6b6b; margin-top: 10px;"></p>
         </div>
