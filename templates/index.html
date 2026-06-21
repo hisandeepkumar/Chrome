@@ -8,59 +8,57 @@
     <link rel="stylesheet" href="/static/style.css">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#1c1c1e">
+    <meta name="theme-color" content="#000000">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🚀 WinLauncher</h1>
-            <p class="subtitle">Tap to launch</p>
-        </header>
-
-        <!-- Main Grid -->
-        <div id="mainView">
-            <div id="appGrid" class="grid">
-                <!-- Apps will be rendered here, last item is Edit button -->
-            </div>
+    <!-- Main Grid View -->
+    <div id="mainView">
+        <div id="appGrid" class="grid">
+            <!-- Apps will be rendered here, last item is Edit button -->
         </div>
+    </div>
 
-        <!-- Edit Overlay -->
-        <div id="editView" class="edit-overlay" style="display:none;">
-            <div class="edit-container glass">
-                <div class="edit-header">
-                    <h2>✏️ Edit Shortcuts</h2>
-                    <button id="closeEdit" class="close-btn">&times;</button>
-                </div>
-                <div id="editList" class="edit-list"></div>
-                <div class="edit-footer">
-                    <button id="addMoreBtn" class="glass-btn primary">➕ Add More</button>
-                </div>
+    <!-- Trackpad Toggle Button -->
+    <button id="trackpadToggle" class="trackpad-btn">🖱️ Trackpad</button>
+
+    <!-- Canvas for Trackpad (hidden by default) -->
+    <canvas id="trackpadCanvas" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:999; background:#000; touch-action:none;"></canvas>
+
+    <!-- Edit Overlay (same as before) -->
+    <div id="editView" class="edit-overlay" style="display:none;">
+        <div class="edit-container glass">
+            <div class="edit-header">
+                <h2>✏️ Edit Shortcuts</h2>
+                <button id="closeEdit" class="close-btn">&times;</button>
             </div>
-        </div>
-
-        <!-- Modal for Add/Edit -->
-        <div id="addModal" class="modal">
-            <div class="modal-content glass">
-                <span class="close-btn" id="closeModal">&times;</span>
-                <h2 id="modalTitle">Edit Shortcut</h2>
-                <input type="hidden" id="editId" value="">
-                <div class="icon-upload-section">
-                    <div id="currentIconDisplay" class="current-icon glow">
-                        <!-- emoji or image -->
-                    </div>
-                    <label class="file-upload-label">
-                        <span>🖼️ Change Icon</span>
-                        <input type="file" id="iconFile" accept="image/png, image/jpeg, image/svg+xml">
-                    </label>
-                    <div id="iconPreview" class="icon-preview" style="display:none;"></div>
-                </div>
-                <input type="text" id="appName" placeholder="Shortcut Name (optional)">
-                <input type="text" id="appPath" placeholder="Path / URL / Command">
-                <button id="saveAppBtn" class="glass-btn primary">Save</button>
-                <p id="modalMsg" style="color: #ff6b6b; margin-top: 10px;"></p>
+            <div id="editList" class="edit-list"></div>
+            <div class="edit-footer">
+                <button id="addMoreBtn" class="glass-btn primary">➕ Add More</button>
             </div>
         </div>
     </div>
+
+    <!-- Modal for Add/Edit -->
+    <div id="addModal" class="modal">
+        <div class="modal-content glass">
+            <span class="close-btn" id="closeModal">&times;</span>
+            <h2 id="modalTitle">Edit Shortcut</h2>
+            <input type="hidden" id="editId" value="">
+            <div class="icon-upload-section">
+                <div id="currentIconDisplay" class="current-icon glow"></div>
+                <label class="file-upload-label">
+                    <span>🖼️ Change Icon</span>
+                    <input type="file" id="iconFile" accept="image/png, image/jpeg, image/svg+xml">
+                </label>
+                <div id="iconPreview" class="icon-preview" style="display:none;"></div>
+            </div>
+            <input type="text" id="appName" placeholder="Shortcut Name (optional)">
+            <input type="text" id="appPath" placeholder="Path / URL / Command">
+            <button id="saveAppBtn" class="glass-btn primary">Save</button>
+            <p id="modalMsg" style="color: #ff6b6b; margin-top: 10px;"></p>
+        </div>
+    </div>
+
     <script src="/static/script.js"></script>
 </body>
 </html>
