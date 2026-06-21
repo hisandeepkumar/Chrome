@@ -34,7 +34,7 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = 'secret!'
 
 # Always use threading mode (no extra dependencies, works in exe)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins="*")
 PORT = 5000
 
 # ---------- Generate PWA Icons ----------
