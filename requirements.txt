@@ -1,0 +1,5 @@
+Flask==2.3.3
+PyQt5==5.15.9
+qrcode==7.4.2
+Pillow==10.1.0
+zeroconf==0.128.4
