@@ -6,6 +6,7 @@ import os
 import subprocess
 import uuid
 from flask import Flask, request, render_template, jsonify, send_from_directory
+from flask_socketio import SocketIO, emit
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
@@ -13,8 +14,12 @@ import qrcode
 from io import BytesIO
 from zeroconf import ServiceInfo, Zeroconf
 from PIL import Image, ImageDraw, ImageFont
+import pyautogui
+import base64
+import tempfile
+import time
 
-# ---------- User Data Directory (Persistent) ----------
+# ---------- User Data ----------
 APPDATA = os.path.expandvars('%APPDATA%')
 USER_DIR = os.path.join(APPDATA, 'WinLauncher')
 ICON_DIR = os.path.join(USER_DIR, 'icons')
@@ -23,17 +28,19 @@ PWA_ICON_DIR = os.path.join(USER_DIR, 'pwa')
 os.makedirs(ICON_DIR, exist_ok=True)
 os.makedirs(PWA_ICON_DIR, exist_ok=True)
 
-# ---------- Flask Setup ----------
+# ---------- Flask + SocketIO ----------
 app = Flask(__name__, static_folder='static', template_folder='templates')
+app.config['SECRET_KEY'] = 'secret!'
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 PORT = 5000
 
-# ---------- Generate Default PWA Icons (if missing) ----------
+# ---------- Generate PWA Icons ----------
 def generate_pwa_icons():
     sizes = [192, 512]
     for size in sizes:
         path = os.path.join(PWA_ICON_DIR, f'icon-{size}.png')
         if not os.path.exists(path):
-            img = Image.new('RGB', (size, size), color='#1c1c1e')
+            img = Image.new('RGB', (size, size), color='#000000')
             d = ImageDraw.Draw(img)
             try:
                 font = ImageFont.truetype("arial.ttf", size//2)
@@ -41,46 +48,52 @@ def generate_pwa_icons():
                 font = ImageFont.load_default()
             d.text((size//2, size//2), "🚀", fill='white', anchor="mm", font=font)
             img.save(path)
-            print(f"✅ Generated PWA icon: {path}")
-
 generate_pwa_icons()
-
-# ---------- Serve PWA Icons ----------
-@app.route('/pwa-icons/<path:filename>')
-def serve_pwa_icon(filename):
-    return send_from_directory(PWA_ICON_DIR, filename)
-
-# ---------- Serve User Icons ----------
-@app.route('/user-icons/<path:filename>')
-def serve_user_icon(filename):
-    return send_from_directory(ICON_DIR, filename)
 
 # ---------- Default Apps ----------
 DEFAULT_APPS = [
-    {"id": "whatsapp", "name": "WhatsApp Web", "path": "https://web.whatsapp.com", "icon": "💬"},
+    {"id": "whatsapp", "name": "WhatsApp", "path": "https://web.whatsapp.com", "icon": "💬"},
     {"id": "youtube", "name": "YouTube", "path": "https://youtube.com", "icon": "▶️"},
-    {"id": "deepseek", "name": "DeepSeek Chat", "path": "https://chat.deepseek.com", "icon": "🤖"},
+    {"id": "deepseek", "name": "DeepSeek", "path": "https://chat.deepseek.com", "icon": "🤖"},
     {"id": "chatgpt", "name": "ChatGPT", "path": "https://chatgpt.com", "icon": "✨"},
     {"id": "gmail", "name": "Gmail", "path": "https://gmail.com", "icon": "📧"},
     {"id": "newtab", "name": "New Tab", "path": "about:blank", "icon": "➕"},
-    {"id": "wifi", "name": "WiFi Settings", "path": "ms-settings:network-wifi", "icon": "📶"},
+    {"id": "wifi", "name": "WiFi", "path": "ms-settings:network-wifi", "icon": "📶"},
     {"id": "bluetooth", "name": "Bluetooth", "path": "ms-settings:bluetooth", "icon": "📳"},
-    {"id": "volume", "name": "Sound Settings", "path": "ms-settings:sound", "icon": "🔊"},
-    {"id": "brightness", "name": "Display Settings", "path": "ms-settings:display", "icon": "☀️"},
-    {"id": "closeall", "name": "Close All Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"},
+    {"id": "volume", "name": "Volume", "path": "ms-settings:sound", "icon": "🔊"},
+    {"id": "brightness", "name": "Brightness", "path": "ms-settings:display", "icon": "☀️"},
+    {"id": "closeall", "name": "Close Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"},
     {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "📝"},
     {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "🧮"},
-    {"id": "explorer", "name": "File Explorer", "path": "explorer.exe", "icon": "📁"},
-    {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "⌨️"}
+    {"id": "explorer", "name": "Explorer", "path": "explorer.exe", "icon": "📁"},
+    {"id": "cmd", "name": "Command", "path": "cmd.exe", "icon": "⌨️"}
 ]
+
+DEFAULT_SETTINGS = {
+    "grid": {
+        "portrait_cols": 3,
+        "portrait_rows": 4,
+        "landscape_cols": 4,
+        "landscape_rows": 3,
+        "icon_size": 64,
+        "glow_size": 20,
+        "blur": 0,
+        "bg_type": "color",
+        "bg_value": "#000000"
+    }
+}
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, 'w') as f:
-            json.dump({"apps": DEFAULT_APPS}, f, indent=4)
-        return {"apps": DEFAULT_APPS}
+            json.dump({"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}, f, indent=4)
+        return {"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}
     with open(CONFIG_FILE, 'r') as f:
-        return json.load(f)
+        data = json.load(f)
+        # Ensure settings exist
+        if 'settings' not in data:
+            data['settings'] = DEFAULT_SETTINGS
+        return data
 
 def save_config(data):
     with open(CONFIG_FILE, 'w') as f:
@@ -88,7 +101,7 @@ def save_config(data):
 
 config_data = load_config()
 
-# ---------- API Routes ----------
+# ---------- Routes ----------
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -97,28 +110,31 @@ def index():
 def send_static(path):
     return send_from_directory('static', path)
 
+@app.route('/pwa-icons/<path:filename>')
+def serve_pwa_icon(filename):
+    return send_from_directory(PWA_ICON_DIR, filename)
+
+@app.route('/user-icons/<path:filename>')
+def serve_user_icon(filename):
+    return send_from_directory(ICON_DIR, filename)
+
 @app.route('/api/apps', methods=['GET'])
 def get_apps():
     return jsonify(config_data['apps'])
 
-@app.route('/api/reorder', methods=['POST'])
-def reorder_apps():
-    new_order = request.json.get('order', [])
-    app_map = {app['id']: app for app in config_data['apps']}
-    reordered = []
-    for app_id in new_order:
-        if app_id in app_map:
-            reordered.append(app_map[app_id])
-    for app in config_data['apps']:
-        if app not in reordered:
-            reordered.append(app)
-    config_data['apps'] = reordered
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    return jsonify(config_data['settings'])
+
+@app.route('/api/settings', methods=['POST'])
+def save_settings():
+    new_settings = request.json
+    config_data['settings'] = new_settings
     save_config(config_data)
     return jsonify({"status": "ok"})
 
 @app.route('/api/apps', methods=['POST'])
 def add_or_edit_app():
-    # Multipart form data
     name = request.form.get('name', '').strip()
     path = request.form.get('path', '').strip()
     icon_emoji = request.form.get('icon', '📦')
@@ -126,33 +142,25 @@ def add_or_edit_app():
     file = request.files.get('icon_file')
 
     if not path:
-        return jsonify({"status": "error", "msg": "Path is required"}), 400
+        return jsonify({"status": "error", "msg": "Path required"}), 400
 
-    # If no name, set to empty string (we'll hide it later)
     if not name:
         name = ""
 
     if edit_id:
-        # Editing existing app
         for app in config_data['apps']:
             if app['id'] == edit_id:
                 app['name'] = name
                 app['path'] = path
-                app['icon'] = icon_emoji  # Keep as fallback
+                app['icon'] = icon_emoji
                 if file and file.filename:
                     file.save(os.path.join(ICON_DIR, f'{edit_id}.png'))
                 save_config(config_data)
                 return jsonify({"status": "updated"})
         return jsonify({"status": "not_found"}), 404
     else:
-        # Adding new app
         new_id = str(uuid.uuid4())[:8]
-        new_app = {
-            "id": new_id,
-            "name": name,
-            "path": path,
-            "icon": icon_emoji
-        }
+        new_app = {"id": new_id, "name": name, "path": path, "icon": icon_emoji}
         config_data['apps'].append(new_app)
         if file and file.filename:
             file.save(os.path.join(ICON_DIR, f'{new_id}.png'))
@@ -182,10 +190,55 @@ def launch_app(app_id):
                     subprocess.Popen(path, shell=True, creationflags=0x08000000)
                 else:
                     subprocess.Popen(f'"{path}"', shell=True)
-                return jsonify({"status": "launched", "name": app['name']})
+                return jsonify({"status": "launched"})
             except Exception as e:
                 return jsonify({"status": "error", "msg": str(e)}), 500
     return jsonify({"status": "not_found"}), 404
+
+# ---------- SocketIO Trackpad ----------
+@socketio.on('connect')
+def handle_connect():
+    print('Client connected')
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print('Client disconnected')
+
+@socketio.on('trackpad_move')
+def handle_trackpad_move(data):
+    try:
+        x = data.get('x', 0)
+        y = data.get('y', 0)
+        # Move cursor relative to screen
+        screen_w, screen_h = pyautogui.size()
+        # x, y are in canvas coordinates (0-1 normalized?)
+        # We'll pass absolute pixel positions from canvas
+        # We'll send absolute screen coordinates from client
+        # So we just use them directly
+        pyautogui.moveTo(x, y)
+    except Exception as e:
+        print('Move error:', e)
+
+@socketio.on('trackpad_click')
+def handle_trackpad_click(data):
+    try:
+        btn = data.get('button', 'left')
+        if btn == 'left':
+            pyautogui.click()
+        elif btn == 'right':
+            pyautogui.rightClick()
+        elif btn == 'middle':
+            pyautogui.middleClick()
+    except Exception as e:
+        print('Click error:', e)
+
+@socketio.on('trackpad_scroll')
+def handle_trackpad_scroll(data):
+    try:
+        dy = data.get('deltaY', 0)
+        pyautogui.scroll(int(-dy))  # invert for natural scrolling
+    except Exception as e:
+        print('Scroll error:', e)
 
 # ---------- mDNS ----------
 def register_mdns():
@@ -230,13 +283,13 @@ class QRWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("WinLauncher")
         self.setFixedSize(450, 550)
-        self.setStyleSheet("background-color: #1c1c1e;")
+        self.setStyleSheet("background-color: #000000;")
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
         layout.setAlignment(Qt.AlignCenter)
 
-        label_info = QLabel("📱 Scan this QR with your phone")
+        label_info = QLabel("📱 Scan to connect")
         label_info.setStyleSheet("color: white; font-size: 16px; font-weight: bold; text-align: center;")
         label_info.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_info)
@@ -258,18 +311,14 @@ class QRWindow(QMainWindow):
         label_qr.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_qr)
 
-        label_mdns = QLabel(f"📶 Also try: http://winlauncher.local:{PORT}")
+        label_mdns = QLabel(f"📶 Also: http://winlauncher.local:{PORT}")
         label_mdns.setStyleSheet("color: #888; font-size: 12px; text-align: center; margin-top: 15px;")
         label_mdns.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_mdns)
 
-# ---------- Run Flask ----------
-def run_flask():
-    app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
-
-# ---------- Main ----------
+# ---------- Run ----------
 if __name__ == '__main__':
-    threading.Thread(target=run_flask, daemon=True).start()
+    threading.Thread(target=lambda: socketio.run(app, host='0.0.0.0', port=PORT, debug=False, use_reloader=False), daemon=True).start()
     zeroconf = register_mdns()
 
     qt_app = QApplication(sys.argv)
