@@ -108,7 +108,6 @@ function applySettings() {
     document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
     document.documentElement.style.setProperty('--glow-size', glowSize + 'px');
     
-    // Background
     if (g.bg_type === 'color') {
         document.body.style.background = g.bg_value || '#000000';
         document.body.style.backgroundImage = '';
@@ -116,12 +115,17 @@ function applySettings() {
         document.querySelectorAll('.page').forEach(p => {
             p.style.background = 'transparent';
         });
+        // Remove video if any
+        const vid = document.getElementById('bgVideo');
+        if (vid) vid.remove();
     } else if (g.bg_type === 'image') {
         if (g.bg_value) {
             document.body.style.backgroundImage = `url(${g.bg_value})`;
             document.body.style.backgroundSize = 'cover';
             document.body.style.backgroundPosition = 'center';
         }
+        const vid = document.getElementById('bgVideo');
+        if (vid) vid.remove();
     } else if (g.bg_type === 'video') {
         let video = document.getElementById('bgVideo');
         if (!video) {
@@ -151,7 +155,7 @@ function applySettings() {
     });
 }
 
-// ---------- Swipe Detection ----------
+// ---------- Swipe ----------
 function setupSwipeDetection() {
     const container = document.getElementById('appContainer');
     let startX = 0, startY = 0, isSwiping = false;
@@ -221,7 +225,7 @@ function updateActiveDot() {
     });
 }
 
-// ---------- Launch App ----------
+// ---------- Launch ----------
 async function launchApp(id) {
     try {
         await fetch(`/api/launch/${id}`);
