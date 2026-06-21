@@ -103,8 +103,13 @@ function updateIndicators(total) {
 
 function applySettings() {
     const g = settings.grid || {};
-    document.documentElement.style.setProperty('--icon-size', (g.icon_size || 64) + 'px');
-    document.documentElement.style.setProperty('--glow-size', (g.glow_size || 20) + 'px');
+    // Apply CSS variables
+    const iconSize = g.icon_size || 64;
+    const glowSize = g.glow_size || 20;
+    document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
+    document.documentElement.style.setProperty('--glow-size', glowSize + 'px');
+    
+    // Background
     if (g.bg_type === 'color') {
         document.body.style.background = g.bg_value || '#000000';
         document.body.style.backgroundImage = '';
@@ -140,13 +145,15 @@ function applySettings() {
             video.play().catch(() => {});
         }
     }
-    document.body.style.backdropFilter = `blur(${g.blur || 0}px)`;
+    // Blur
+    const blur = g.blur || 0;
+    document.body.style.backdropFilter = `blur(${blur}px)`;
     document.querySelectorAll('.page').forEach(p => {
-        p.style.backdropFilter = `blur(${g.blur || 0}px)`;
+        p.style.backdropFilter = `blur(${blur}px)`;
     });
 }
 
-// ---------- Swipe Detection for Page Navigation ----------
+// ---------- Swipe Detection ----------
 function setupSwipeDetection() {
     const container = document.getElementById('appContainer');
     let startX = 0, startY = 0, isSwiping = false;
@@ -184,7 +191,6 @@ function setupSwipeDetection() {
             }
         }
     }, { passive: true });
-
     container.addEventListener('wheel', (e) => {
         if (e.deltaX !== 0) {
             e.preventDefault();
@@ -200,7 +206,6 @@ function setupSwipeDetection() {
             }
         }
     }, { passive: false });
-
     container.addEventListener('scroll', () => {
         const pageWidth = container.clientWidth;
         const newPage = Math.round(container.scrollLeft / pageWidth);
