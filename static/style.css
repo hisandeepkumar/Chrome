@@ -1,373 +1,119 @@
-* { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-html, body {
-    width: 100%; height: 100%;
-    background: #000000;
-    color: white;
-    overflow: hidden;
-    touch-action: pan-y;
-}
-body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 0;
-    margin: 0;
-}
-#mainView {
-    width: 100%;
-    height: 100%;
-    position: relative;
-    overflow: hidden;
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <title>WinLauncher</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="stylesheet" href="/static/style.css">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+</head>
+<body>
+    <button id="fullscreenBtn" class="fullscreen-btn">⛶</button>
 
-.app-container {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-.app-container::-webkit-scrollbar { display: none; }
+    <div id="mainView">
+        <div id="appContainer" class="app-container"></div>
+        <div id="pageIndicators" class="page-indicators"></div>
+        <div class="action-buttons">
+            <button id="editBtn" class="action-btn">✏️</button>
+            <button id="gridSettingsBtn" class="action-btn">⚙️</button>
+        </div>
+    </div>
 
-.page {
-    flex: 0 0 100%;
-    height: 100%;
-    scroll-snap-align: start;
-    display: grid;
-    gap: 16px;
-    padding: 20px;
-    justify-items: center;
-    align-content: center;
-}
+    <!-- Edit Overlay -->
+    <div id="editView" class="edit-overlay" style="display:none;">
+        <div class="edit-container glass">
+            <div class="edit-header">
+                <h2>✏️ Edit Shortcuts</h2>
+                <button id="closeEdit" class="close-btn">&times;</button>
+            </div>
+            <div id="editList" class="edit-list"></div>
+            <div class="edit-footer">
+                <button id="addMoreBtn" class="glass-btn primary">➕ Add More</button>
+            </div>
+        </div>
+    </div>
 
-/* ---------- App Card ---------- */
-.app-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    cursor: pointer;
-    transition: transform 0.2s;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    gap: 4px;
-}
-.app-card:hover { transform: scale(1.05); }
+    <!-- Grid Settings Modal -->
+    <div id="gridSettingsModal" class="modal" style="display:none;">
+        <div class="modal-content glass" style="max-width:450px;">
+            <span class="close-btn" id="closeSettings">&times;</span>
+            <h2>⚙️ Grid Settings</h2>
+            <div class="settings-group">
+                <label>Portrait Columns</label>
+                <input type="number" id="portraitCols" min="1" max="6" value="3">
+            </div>
+            <div class="settings-group">
+                <label>Portrait Rows</label>
+                <input type="number" id="portraitRows" min="1" max="6" value="4">
+            </div>
+            <div class="settings-group">
+                <label>Landscape Columns</label>
+                <input type="number" id="landscapeCols" min="1" max="8" value="4">
+            </div>
+            <div class="settings-group">
+                <label>Landscape Rows</label>
+                <input type="number" id="landscapeRows" min="1" max="6" value="3">
+            </div>
+            <div class="settings-group">
+                <label>Icon Size (px)</label>
+                <input type="range" id="iconSize" min="40" max="120" value="64">
+                <span id="iconSizeVal">64</span>
+            </div>
+            <div class="settings-group">
+                <label>Glow Size</label>
+                <input type="range" id="glowSize" min="0" max="60" value="20">
+                <span id="glowSizeVal">20</span>
+            </div>
+            <div class="settings-group">
+                <label>Background Blur</label>
+                <input type="range" id="bgBlur" min="0" max="20" value="0" step="0.5">
+                <span id="bgBlurVal">0</span>
+            </div>
+            <div class="settings-group">
+                <label>Background Type</label>
+                <select id="bgType">
+                    <option value="color">Color</option>
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                </select>
+            </div>
+            <div class="settings-group" id="bgColorGroup">
+                <label>Background Color</label>
+                <input type="color" id="bgColor" value="#000000">
+            </div>
+            <div class="settings-group" id="bgFileGroup" style="display:none;">
+                <label>Upload Image/Video</label>
+                <input type="file" id="bgFile" accept="image/*,video/*">
+            </div>
+            <button id="saveSettingsBtn" class="glass-btn primary">Save Settings</button>
+            <p id="settingsMsg" style="color:#ff6b6b; margin-top:10px;"></p>
+        </div>
+    </div>
 
-/* Icon (Emoji) - आकार CSS Variable से */
-.app-card .icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--icon-size, 64px);
-    height: var(--icon-size, 64px);
-    font-size: calc(var(--icon-size, 64px) * 0.8);
-    line-height: 1;
-    text-align: center;
-    filter: drop-shadow(0 0 var(--glow-size, 20px) rgba(255,255,255,0.2));
-    border-radius: 16px;
-}
+    <!-- Add/Edit Modal -->
+    <div id="addModal" class="modal" style="display:none;">
+        <div class="modal-content glass">
+            <span class="close-btn" id="closeModal">&times;</span>
+            <h2 id="modalTitle">Edit Shortcut</h2>
+            <input type="hidden" id="editId">
+            <div class="icon-upload-section">
+                <div id="currentIconDisplay" class="current-icon glow"></div>
+                <label class="file-upload-label">
+                    <span>🖼️ Change Icon</span>
+                    <input type="file" id="iconFile" accept="image/png,image/jpeg,image/svg+xml">
+                </label>
+                <div id="iconPreview" class="icon-preview" style="display:none;"></div>
+            </div>
+            <input type="text" id="appName" placeholder="Shortcut Name (optional)">
+            <input type="text" id="appPath" placeholder="Path / URL / Command">
+            <button id="saveAppBtn" class="glass-btn primary">Save</button>
+            <p id="modalMsg" style="color:#ff6b6b; margin-top:10px;"></p>
+        </div>
+    </div>
 
-/* Icon (Image) - आकार CSS Variable से */
-.app-card .icon-img {
-    display: block;
-    width: var(--icon-size, 64px);
-    height: var(--icon-size, 64px);
-    border-radius: 16px;
-    object-fit: cover;
-    box-shadow: 0 0 var(--glow-size, 20px) rgba(100,200,255,0.3);
-    border: 2px solid rgba(255,255,255,0.1);
-    transition: box-shadow 0.3s;
-}
-.app-card .icon-img:hover {
-    box-shadow: 0 0 calc(var(--glow-size, 20px) * 1.5) rgba(100,200,255,0.6);
-}
-
-.app-card .name {
-    font-size: 0.7rem;
-    color: #aaa;
-    max-width: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.app-card .name:empty { display: none; }
-
-/* ---------- Page Indicators ---------- */
-.page-indicators {
-    position: absolute;
-    bottom: 80px;
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-    pointer-events: none;
-}
-.page-indicators .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.3);
-    transition: 0.3s;
-}
-.page-indicators .dot.active { background: white; width: 20px; border-radius: 4px; }
-
-/* ---------- Action Buttons ---------- */
-.action-buttons {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 16px;
-    z-index: 10;
-}
-.action-btn {
-    background: rgba(255,255,255,0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 40px;
-    color: white;
-    padding: 10px 18px;
-    font-size: 1.2rem;
-    cursor: pointer;
-    transition: 0.2s;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
-.action-btn:hover {
-    background: rgba(255,255,255,0.2);
-    transform: scale(1.05);
-}
-
-/* ---------- Fullscreen Button ---------- */
-.fullscreen-btn {
-    position: fixed;
-    top: 15px;
-    right: 15px;
-    background: rgba(255,255,255,0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 30px;
-    color: white;
-    padding: 6px 12px;
-    font-size: 1.2rem;
-    cursor: pointer;
-    z-index: 1000;
-    transition: 0.2s;
-}
-.fullscreen-btn:hover { background: rgba(255,255,255,0.2); }
-
-/* ---------- Edit Overlay (same as before) ---------- */
-.edit-overlay {
-    position: fixed;
-    top:0; left:0; width:100%; height:100%;
-    background: rgba(0,0,0,0.8);
-    backdrop-filter: blur(10px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000;
-    padding: 20px;
-}
-.edit-container {
-    width: 100%;
-    max-width: 500px;
-    max-height: 85vh;
-    background: rgba(44,44,46,0.9);
-    backdrop-filter: blur(30px);
-    border-radius: 32px;
-    border: 1px solid rgba(255,255,255,0.15);
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-.edit-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-}
-.edit-header h2 { font-size:1.4rem; font-weight:600; color:white; }
-.close-btn { font-size:28px; color:#aaa; cursor:pointer; background:none; border:none; }
-.close-btn:hover { color:white; }
-
-.edit-list {
-    flex:1;
-    overflow-y:auto;
-    padding-right:5px;
-}
-.edit-list::-webkit-scrollbar { width:4px; }
-.edit-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.3); border-radius:10px; }
-
-.edit-item {
-    display:flex;
-    align-items:center;
-    background:rgba(255,255,255,0.05);
-    border-radius:16px;
-    padding:10px 14px;
-    margin-bottom:10px;
-    border:1px solid rgba(255,255,255,0.05);
-    transition:0.2s;
-    cursor:grab;
-}
-.edit-item:active { cursor:grabbing; }
-.edit-item.dragging { opacity:0.4; border:2px dashed #0a84ff; }
-.edit-item .drag-handle { font-size:1.2rem; color:#666; margin-right:12px; cursor:grab; user-select:none; }
-.edit-item .item-icon { width:36px; height:36px; border-radius:8px; object-fit:cover; margin-right:12px; font-size:1.5rem; display:flex; align-items:center; justify-content:center; }
-.edit-item .item-name { flex:1; font-weight:500; font-size:0.95rem; color:white; }
-.edit-item .item-actions { display:flex; gap:8px; }
-.edit-item .item-actions button { background:rgba(255,255,255,0.1); border:none; border-radius:50%; width:30px; height:30px; font-size:14px; color:white; cursor:pointer; transition:0.2s; display:flex; align-items:center; justify-content:center; }
-.edit-item .item-actions .edit-btn:hover { background:rgba(0,122,255,0.6); }
-.edit-item .item-actions .delete-btn:hover { background:rgba(255,69,58,0.8); }
-
-.edit-footer { margin-top:15px; display:flex; justify-content:center; }
-.edit-footer .glass-btn { width:100%; text-align:center; }
-
-/* ---------- Modal ---------- */
-.modal {
-    display: none;
-    position: fixed;
-    top:0; left:0; width:100%; height:100%;
-    background: rgba(0,0,0,0.7);
-    backdrop-filter: blur(5px);
-    align-items: center;
-    justify-content: center;
-    z-index: 3000;
-}
-.modal-content {
-    width: 90%;
-    max-width: 400px;
-    padding: 30px;
-    border-radius: 32px;
-    background: rgba(44,44,46,0.95);
-    backdrop-filter: blur(30px);
-    border: 1px solid rgba(255,255,255,0.15);
-    position: relative;
-    color: white;
-    max-height: 90vh;
-    overflow-y: auto;
-}
-.modal-content .close-btn {
-    position: absolute;
-    top:15px; right:20px;
-    font-size:28px;
-    color:#aaa;
-    cursor:pointer;
-}
-.modal-content .close-btn:hover { color:white; }
-.modal-content h2 { margin-bottom:20px; font-weight:600; }
-.modal-content input, .modal-content select, .modal-content .file-upload-label {
-    width:100%;
-    padding:14px 16px;
-    margin-bottom:14px;
-    border-radius:16px;
-    border:1px solid rgba(255,255,255,0.2);
-    background:rgba(255,255,255,0.08);
-    color:white;
-    font-size:1rem;
-    outline:none;
-    transition:border 0.2s;
-}
-.modal-content input:focus, .modal-content select:focus { border-color:#0a84ff; }
-.modal-content input::placeholder { color:#888; }
-.modal-content select option { background:#222; }
-
-.settings-group {
-    margin-bottom: 14px;
-}
-.settings-group label {
-    display: block;
-    font-size:0.9rem;
-    color:#aaa;
-    margin-bottom:4px;
-}
-.settings-group input[type="range"] {
-    width: 70%;
-    display: inline-block;
-    vertical-align: middle;
-}
-.settings-group input[type="number"] {
-    width: 60px;
-    display: inline-block;
-    margin-left:10px;
-}
-.settings-group input[type="color"] {
-    width: 100%;
-    height: 40px;
-    padding: 2px;
-    border-radius: 8px;
-}
-.settings-group span {
-    display: inline-block;
-    min-width: 30px;
-    text-align: center;
-    color: white;
-}
-
-.icon-upload-section {
-    display: flex;
-    align-items:center;
-    gap:15px;
-    margin-bottom:14px;
-    flex-wrap:wrap;
-}
-.current-icon {
-    width:60px; height:60px;
-    border-radius:16px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:2.5rem;
-    overflow:hidden;
-    background:rgba(255,255,255,0.05);
-}
-.current-icon img { width:100%; height:100%; object-fit:cover; border-radius:16px; }
-.current-icon.glow { box-shadow:0 0 25px rgba(100,200,255,0.5); border:2px solid rgba(100,200,255,0.3); }
-.file-upload-label {
-    flex:1;
-    padding:10px 16px;
-    border:1px dashed rgba(255,255,255,0.3);
-    border-radius:16px;
-    text-align:center;
-    cursor:pointer;
-    background:rgba(255,255,255,0.05);
-}
-.file-upload-label:hover { background:rgba(255,255,255,0.1); }
-.file-upload-label input { display:none; }
-.icon-preview {
-    width:60px; height:60px;
-    border-radius:16px;
-    box-shadow:0 0 20px rgba(100,200,255,0.4);
-    overflow:hidden;
-}
-.icon-preview img { width:100%; height:100%; object-fit:cover; }
-
-.glass-btn {
-    background: rgba(255,255,255,0.15);
-    backdrop-filter: blur(20px);
-    border:1px solid rgba(255,255,255,0.2);
-    padding:12px 24px;
-    border-radius:40px;
-    color:white;
-    font-size:1rem;
-    font-weight:600;
-    cursor:pointer;
-    transition:0.2s;
-    box-shadow:0 8px 20px rgba(0,0,0,0.3);
-}
-.glass-btn:hover { transform:scale(1.03); background:rgba(255,255,255,0.25); }
-.glass-btn.primary { background:rgba(0,122,255,0.8); border-color:rgba(0,122,255,0.9); }
-
-/* Responsive tweaks */
-@media (max-width: 500px) {
-    .action-btn { padding:8px 14px; font-size:1rem; }
-    .fullscreen-btn { top:10px; right:10px; font-size:1rem; padding:4px 10px; }
-}
+    <script src="/static/script.js"></script>
+</body>
+</html>
