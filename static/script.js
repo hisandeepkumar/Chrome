@@ -39,15 +39,14 @@ async function fetchApps() {
         renderPages(appsData);
         updateDockIcons();
         populateDockSelector();
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error('fetchApps error:', e); }
 }
 
 async function fetchSettings() {
     try {
-        // First try server
         const res = await fetch('/api/settings');
         const serverSettings = await res.json();
-        // Compare with local
+        console.log('📡 Server settings:', serverSettings);
         let cached = loadSettingsFromLocal();
         if (JSON.stringify(serverSettings) !== JSON.stringify(cached)) {
             settings = serverSettings;
@@ -60,7 +59,7 @@ async function fetchSettings() {
         }
         applySettings();
     } catch (e) {
-        console.error('Error fetching settings:', e);
+        console.error('fetchSettings error:', e);
         let cached = loadSettingsFromLocal();
         if (cached) {
             settings = cached;
@@ -98,7 +97,6 @@ function renderPages(apps) {
     const cols = grid.cols || 3;
     const rows = grid.rows || 4;
     const itemsPerPage = cols * rows;
-    // Add special items at the end
     const specialItems = [
         { id: '__edit__', name: 'Edit', icon: '✏️', isSpecial: true },
         { id: '__settings__', name: 'Settings', icon: '⚙️', isSpecial: true }
@@ -352,7 +350,6 @@ function initSettingsUI() {
         if (e.target === modal) modal.style.display = 'none';
     });
 
-    // Tabs
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -363,26 +360,22 @@ function initSettingsUI() {
         });
     });
 
-    // Range displays
     document.querySelectorAll('input[type="range"]').forEach(range => {
         const valSpan = document.getElementById(range.id + 'Val');
         if (valSpan) {
             range.addEventListener('input', () => {
                 valSpan.textContent = range.value;
-                // Live preview
                 applySettings();
             });
         }
     });
 
-    // Wallpaper type toggle
     document.getElementById('wallpaperType').addEventListener('change', function() {
         const isFile = this.value === 'image' || this.value === 'video';
         document.getElementById('wallpaperColorGroup').style.display = isFile ? 'none' : 'block';
         document.getElementById('wallpaperFileGroup').style.display = isFile ? 'block' : 'none';
     });
 
-    // Presets
     document.querySelectorAll('.preset-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const presetName = btn.dataset.preset;
@@ -597,11 +590,13 @@ async function saveSettings() {
             body: JSON.stringify(newSettings)
         });
         const data = await res.json();
+        console.log('📤 Save response:', data);
         document.getElementById('settingsMsg').textContent = data.message || 'Saved!';
         setTimeout(() => document.getElementById('settingsMsg').textContent = '', 2000);
-        // Re-fetch to ensure server has latest
+        // Re-fetch to confirm server saved
         await fetchSettings();
     } catch (e) {
+        console.error('Save error:', e);
         document.getElementById('settingsMsg').textContent = '⚠️ Offline - Settings cached locally';
     }
 }
@@ -620,7 +615,7 @@ function getGridFromUI(prefix) {
     };
 }
 
-// ---------- Presets (updated with padding 100) ----------
+// ---------- Presets (updated) ----------
 function applyPreset(name) {
     const presets = {
         'Apple Clean': {
@@ -737,7 +732,7 @@ function resetToDefault() {
     }).then(() => fetchSettings()).catch(console.error);
 }
 
-// ---------- Export/Import (unchanged) ----------
+// ---------- Export/Import ----------
 async function exportBackup() {
     try {
         const res = await fetch('/api/export');
@@ -774,7 +769,7 @@ async function importBackup(event) {
     }
 }
 
-// ---------- Preview (unchanged) ----------
+// ---------- Preview ----------
 function setupPreview() {
     document.querySelectorAll('#tabEffects input, #tabEffects select').forEach(el => {
         el.addEventListener('input', () => {
@@ -808,7 +803,7 @@ function hexToRgb(hex) {
     return result ? `${parseInt(result[1],16)},${parseInt(result[2],16)},${parseInt(result[3],16)}` : '255,255,255';
 }
 
-// ---------- Swipe, Edit, Launch, Fullscreen (unchanged) ----------
+// ---------- Swipe, Edit, Launch, Fullscreen ----------
 function setupSwipeDetection() {
     const container = document.getElementById('appContainer');
     let startX = 0, startY = 0, isSwiping = false;
@@ -890,7 +885,7 @@ function initFullscreen() {
     });
 }
 
-// ---------- Edit View (unchanged) ----------
+// ---------- Edit View ----------
 function initEditView() {
     const closeEdit = document.getElementById('closeEdit');
     const addMoreBtn = document.getElementById('addMoreBtn');
@@ -1012,7 +1007,7 @@ async function deleteApp(id) {
     }
 }
 
-// ---------- Add/Edit Modal (unchanged) ----------
+// ---------- Add/Edit Modal ----------
 function initAddModal() {
     const closeModal = document.getElementById('closeModal');
     const saveAppBtn = document.getElementById('saveAppBtn');
