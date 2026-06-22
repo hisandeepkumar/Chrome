@@ -38,8 +38,6 @@ body {
     height: 100%;
     scroll-snap-align: start;
     display: grid;
-    gap: 16px;
-    padding: 20px;
     justify-items: center;
     align-content: center;
 }
@@ -51,13 +49,14 @@ body {
     justify-content: center;
     text-align: center;
     cursor: pointer;
-    transition: transform 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s;
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     gap: 4px;
 }
-.app-card:hover { transform: scale(1.05); }
+.app-card:hover { transform: scale(var(--hover-scale, 1.05)); }
+.app-card:active { transform: scale(0.95); transition-duration: var(--tap-animation, 0.15s); }
 
 .app-card .icon {
     display: flex;
@@ -68,26 +67,31 @@ body {
     font-size: calc(var(--icon-size, 64px) * 0.8);
     line-height: 1;
     text-align: center;
-    filter: drop-shadow(0 0 var(--glow-size, 20px) rgba(255,255,255,0.2));
-    border-radius: 16px;
+    filter: drop-shadow(0 0 var(--glow-radius, 20px) rgba(var(--glow-color-rgb, 255,255,255), var(--glow-brightness, 0.5)));
+    border-radius: var(--border-radius, 16px);
+    background: rgba(255,255,255,0.05);
+    transition: all 0.2s;
 }
-
 .app-card .icon-img {
     display: block;
     width: var(--icon-size, 64px);
     height: var(--icon-size, 64px);
-    border-radius: 16px;
     object-fit: cover;
-    box-shadow: 0 0 var(--glow-size, 20px) rgba(100,200,255,0.3);
+    border-radius: var(--border-radius, 16px);
+    box-shadow: 0 0 var(--glow-radius, 20px) rgba(var(--glow-color-rgb, 255,255,255), var(--glow-brightness, 0.5));
     border: 2px solid rgba(255,255,255,0.1);
-    transition: box-shadow 0.3s;
+    transition: box-shadow 0.3s, transform 0.2s;
 }
 .app-card .icon-img:hover {
-    box-shadow: 0 0 calc(var(--glow-size, 20px) * 1.5) rgba(100,200,255,0.6);
+    box-shadow: 0 0 calc(var(--glow-radius, 20px) * 1.5) rgba(var(--glow-color-rgb, 255,255,255), var(--glow-brightness, 0.8));
 }
+.shape-square { border-radius: 0 !important; }
+.shape-rounded { border-radius: var(--border-radius, 16px) !important; }
+.shape-circle { border-radius: 50% !important; }
+.shape-squircle { border-radius: 30% !important; }
 
 .app-card .name {
-    font-size: 0.7rem;
+    font-size: var(--label-font-size, 12px);
     color: #aaa;
     max-width: 80px;
     overflow: hidden;
@@ -238,7 +242,7 @@ body {
 }
 .modal-content {
     width: 90%;
-    max-width: 400px;
+    max-width: 500px;
     padding: 30px;
     border-radius: 32px;
     background: rgba(44,44,46,0.95);
@@ -360,6 +364,94 @@ body {
 .glass-btn:hover { transform:scale(1.03); background:rgba(255,255,255,0.25); }
 .glass-btn.primary { background:rgba(0,122,255,0.8); border-color:rgba(0,122,255,0.9); }
 
+/* Settings Tabs */
+.settings-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+.tab-btn {
+    background: rgba(255,255,255,0.1);
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: 0.2s;
+}
+.tab-btn.active {
+    background: rgba(0,122,255,0.5);
+    color: white;
+}
+.tab-btn:hover { background: rgba(255,255,255,0.2); }
+
+.tab-content {
+    display: none;
+}
+.tab-content:first-of-type { display: block; }
+
+/* Dock */
+.dock-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    z-index: 100;
+    transition: transform 0.3s ease;
+}
+.dock-container.dock-auto-hide {
+    transform: translateY(100%);
+}
+.dock-container.dock-auto-hide:hover {
+    transform: translateY(0);
+}
+.dock-item {
+    width: var(--dock-icon-size, 48px);
+    height: var(--dock-icon-size, 48px);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    cursor: pointer;
+    transition: 0.2s;
+    overflow: hidden;
+}
+.dock-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px;
+}
+.dock-item:hover {
+    transform: scale(1.1);
+    background: rgba(255,255,255,0.2);
+}
+
+/* Preview card */
+.preview-card {
+    margin-top: 20px;
+    padding: 20px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 16px;
+    text-align: center;
+}
+.preview-card .app-card {
+    display: inline-flex;
+}
+
+/* Responsive */
 @media (max-width: 500px) {
     .action-btn { padding:8px 14px; font-size:1rem; }
     .fullscreen-btn { top:10px; right:10px; font-size:1rem; padding:4px 10px; }
