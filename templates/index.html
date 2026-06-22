@@ -16,10 +16,6 @@
     <div id="mainView">
         <div id="appContainer" class="app-container"></div>
         <div id="pageIndicators" class="page-indicators"></div>
-        <div class="action-buttons">
-            <button id="editBtn" class="action-btn">✏️</button>
-            <button id="gridSettingsBtn" class="action-btn">⚙️</button>
-        </div>
         <!-- Dock -->
         <div id="dockContainer" class="dock-container" style="display:none;"></div>
     </div>
@@ -54,7 +50,6 @@
                 <button class="tab-btn" data-tab="backup">Backup</button>
             </div>
             <div class="tab-content" id="tabGrid">
-                <!-- Grid Settings (shared between portrait/landscape) -->
                 <div style="display:flex; flex-wrap:wrap; gap:20px;">
                     <div style="flex:1; min-width:200px;">
                         <h3>Portrait</h3>
@@ -72,10 +67,7 @@
                         <div class="settings-group"><label>Label Font Size</label><input type="number" id="portraitLabelFontSize" min="8" max="24" value="12"></div>
                         <div class="settings-group"><label>Horizontal Gap</label><input type="number" id="portraitHGap" min="0" max="40" value="16"></div>
                         <div class="settings-group"><label>Vertical Gap</label><input type="number" id="portraitVGap" min="0" max="40" value="16"></div>
-                        <div class="settings-group"><label>Edge Padding Top</label><input type="number" id="portraitPadTop" min="0" max="100" value="20"></div>
-                        <div class="settings-group"><label>Edge Padding Bottom</label><input type="number" id="portraitPadBottom" min="0" max="100" value="20"></div>
-                        <div class="settings-group"><label>Edge Padding Left</label><input type="number" id="portraitPadLeft" min="0" max="100" value="20"></div>
-                        <div class="settings-group"><label>Edge Padding Right</label><input type="number" id="portraitPadRight" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Padding (all sides)</label><input type="number" id="portraitPadding" min="0" max="100" value="20"></div>
                         <div class="settings-group"><label>Grid Alignment</label>
                             <select id="portraitGridAlignment">
                                 <option value="center">Center</option>
@@ -100,10 +92,7 @@
                         <div class="settings-group"><label>Label Font Size</label><input type="number" id="landscapeLabelFontSize" min="8" max="24" value="12"></div>
                         <div class="settings-group"><label>Horizontal Gap</label><input type="number" id="landscapeHGap" min="0" max="40" value="16"></div>
                         <div class="settings-group"><label>Vertical Gap</label><input type="number" id="landscapeVGap" min="0" max="40" value="16"></div>
-                        <div class="settings-group"><label>Edge Padding Top</label><input type="number" id="landscapePadTop" min="0" max="100" value="20"></div>
-                        <div class="settings-group"><label>Edge Padding Bottom</label><input type="number" id="landscapePadBottom" min="0" max="100" value="20"></div>
-                        <div class="settings-group"><label>Edge Padding Left</label><input type="number" id="landscapePadLeft" min="0" max="100" value="20"></div>
-                        <div class="settings-group"><label>Edge Padding Right</label><input type="number" id="landscapePadRight" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Padding (all sides)</label><input type="number" id="landscapePadding" min="0" max="100" value="20"></div>
                         <div class="settings-group"><label>Grid Alignment</label>
                             <select id="landscapeGridAlignment">
                                 <option value="center">Center</option>
@@ -123,7 +112,6 @@
                 <div class="settings-group"><label>Border Radius</label><input type="range" id="borderRadius" min="0" max="50" value="16"><span id="borderRadiusVal">16</span></div>
                 <div class="settings-group"><label>Hover Scale</label><input type="number" id="hoverScale" min="1" max="1.5" step="0.01" value="1.05"></div>
                 <div class="settings-group"><label>Tap Animation</label><input type="checkbox" id="tapAnimation" checked></div>
-                <!-- Live Preview -->
                 <div class="preview-card">
                     <div id="previewApp" class="app-card">
                         <span class="icon" style="font-size:2.5rem;">🚀</span>
