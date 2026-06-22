@@ -7,7 +7,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initAddModal();
     setupSwipeDetection();
     setupOrientationChange();
-    setupDragAndDrop();
 });
 
 // ---------- Global State ----------
@@ -124,15 +123,11 @@ function createAppCard(app) {
 }
 
 function getCols() {
-    const isLandscape = window.innerWidth > window.innerHeight;
-    if (isLandscape) return settings.grid?.landscape_cols || 4;
-    return settings.grid?.portrait_cols || 3;
+    return settings.grid?.cols || 3;
 }
 
 function getRows() {
-    const isLandscape = window.innerWidth > window.innerHeight;
-    if (isLandscape) return settings.grid?.landscape_rows || 3;
-    return settings.grid?.portrait_rows || 4;
+    return settings.grid?.rows || 4;
 }
 
 function updateIndicators(total) {
@@ -302,19 +297,16 @@ function toggleFullscreen() {
     }
 }
 
-// ---------- Grid Settings ----------
+// ---------- Grid Settings (simplified) ----------
 function initGridSettings() {
     const modal = document.getElementById('gridSettingsModal');
     const close = document.getElementById('closeSettings');
     const save = document.getElementById('saveSettingsBtn');
 
-    // We'll call openGridSettings from elsewhere
     window.openGridSettings = function() {
         const g = settings.grid || {};
-        document.getElementById('portraitCols').value = g.portrait_cols || 3;
-        document.getElementById('portraitRows').value = g.portrait_rows || 4;
-        document.getElementById('landscapeCols').value = g.landscape_cols || 4;
-        document.getElementById('landscapeRows').value = g.landscape_rows || 3;
+        document.getElementById('gridCols').value = g.cols || 3;
+        document.getElementById('gridRows').value = g.rows || 4;
         document.getElementById('iconSize').value = g.icon_size || 64;
         document.getElementById('iconSizeVal').textContent = g.icon_size || 64;
         document.getElementById('glowSize').value = g.glow_size || 20;
@@ -360,10 +352,8 @@ function initGridSettings() {
     });
 
     save.addEventListener('click', async () => {
-        const portraitCols = parseInt(document.getElementById('portraitCols').value) || 3;
-        const portraitRows = parseInt(document.getElementById('portraitRows').value) || 4;
-        const landscapeCols = parseInt(document.getElementById('landscapeCols').value) || 4;
-        const landscapeRows = parseInt(document.getElementById('landscapeRows').value) || 3;
+        const cols = parseInt(document.getElementById('gridCols').value) || 3;
+        const rows = parseInt(document.getElementById('gridRows').value) || 4;
         const iconSize = parseInt(document.getElementById('iconSize').value) || 64;
         const glowSize = parseInt(document.getElementById('glowSize').value) || 20;
         const blur = parseFloat(document.getElementById('bgBlur').value) || 0;
@@ -374,7 +364,7 @@ function initGridSettings() {
         
         if (bgType === 'color') {
             bgValue = document.getElementById('bgColor').value;
-            await saveSettingsToServer(portraitCols, portraitRows, landscapeCols, landscapeRows, iconSize, glowSize, blur, bgType, bgValue);
+            await saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType, bgValue);
             modal.style.display = 'none';
         } else {
             const fileInput = document.getElementById('bgFile');
@@ -387,7 +377,7 @@ function initGridSettings() {
                 const reader = new FileReader();
                 reader.onload = async function(e) {
                     bgValue = e.target.result;
-                    await saveSettingsToServer(portraitCols, portraitRows, landscapeCols, landscapeRows, iconSize, glowSize, blur, bgType, bgValue);
+                    await saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType, bgValue);
                     modal.style.display = 'none';
                 };
                 reader.onerror = function() {
@@ -396,20 +386,18 @@ function initGridSettings() {
                 reader.readAsDataURL(file);
             } else {
                 bgValue = settings.grid?.bg_value || '';
-                await saveSettingsToServer(portraitCols, portraitRows, landscapeCols, landscapeRows, iconSize, glowSize, blur, bgType, bgValue);
+                await saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType, bgValue);
                 modal.style.display = 'none';
             }
         }
     });
 }
 
-async function saveSettingsToServer(portraitCols, portraitRows, landscapeCols, landscapeRows, iconSize, glowSize, blur, bgType, bgValue) {
+async function saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType, bgValue) {
     const newSettings = {
         grid: {
-            portrait_cols: portraitCols,
-            portrait_rows: portraitRows,
-            landscape_cols: landscapeCols,
-            landscape_rows: landscapeRows,
+            cols: cols,
+            rows: rows,
             icon_size: iconSize,
             glow_size: glowSize,
             blur: blur,
@@ -513,7 +501,7 @@ function renderEditList(apps) {
         actions.appendChild(delBtn);
         item.appendChild(actions);
 
-        // Drag events for edit list
+        // Drag events for edit list (only here)
         item.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/plain', app.id);
             item.classList.add('dragging');
@@ -682,7 +670,7 @@ async function saveApp() {
     }
 }
 
-// ---------- Orientation Change ----------
+// ---------- Orientation Change (preserve current page) ----------
 function setupOrientationChange() {
     let resizeTimer;
     window.addEventListener('resize', () => {
@@ -701,249 +689,4 @@ function setupOrientationChange() {
             }
         }, 200);
     });
-}
-
-// ---------- Drag and Drop on Main Grid ----------
-function setupDragAndDrop() {
-    let dragData = null;
-    const container = document.getElementById('appContainer');
-
-    // Mouse events
-    container.addEventListener('mousedown', startDrag);
-    document.addEventListener('mousemove', moveDrag);
-    document.addEventListener('mouseup', endDrag);
-
-    // Touch events
-    container.addEventListener('touchstart', startDragTouch, { passive: true });
-    document.addEventListener('touchmove', moveDragTouch, { passive: false });
-    document.addEventListener('touchend', endDragTouch, { passive: true });
-
-    let dragElement = null;
-    let clone = null;
-    let startX, startY;
-    let dragId = null;
-    let isDragging = false;
-    let dragOffsetX, dragOffsetY;
-
-    function startDrag(e) {
-        if (e.button !== 0) return;
-        const card = e.target.closest('.app-card');
-        if (!card) return;
-        // Don't drag system apps
-        const appId = card.dataset.id;
-        if (appId === 'edit_shortcuts' || appId === 'grid_settings') return;
-        dragData = {
-            id: appId,
-            card: card,
-            page: card.closest('.page'),
-            offsetX: e.offsetX,
-            offsetY: e.offsetY,
-        };
-        e.preventDefault();
-    }
-
-    function startDragTouch(e) {
-        const touch = e.touches[0];
-        const card = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.app-card');
-        if (!card) return;
-        const appId = card.dataset.id;
-        if (appId === 'edit_shortcuts' || appId === 'grid_settings') return;
-        // Long press detection
-        let longPressTimer = setTimeout(() => {
-            // Start drag
-            const rect = card.getBoundingClientRect();
-            dragData = {
-                id: appId,
-                card: card,
-                page: card.closest('.page'),
-                offsetX: touch.clientX - rect.left,
-                offsetY: touch.clientY - rect.top,
-                touch: true
-            };
-            isDragging = true;
-            createClone(touch.clientX, touch.clientY);
-            card.style.opacity = '0.3';
-            e.preventDefault();
-        }, 400);
-        card._longPressTimer = longPressTimer;
-        card._touchStart = { x: touch.clientX, y: touch.clientY };
-    }
-
-    function moveDrag(e) {
-        if (!dragData) return;
-        if (!isDragging) {
-            // Check if moved enough to start drag
-            const dx = e.clientX - dragData.card.getBoundingClientRect().left - dragData.offsetX;
-            const dy = e.clientY - dragData.card.getBoundingClientRect().top - dragData.offsetY;
-            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-                isDragging = true;
-                createClone(e.clientX, e.clientY);
-                dragData.card.style.opacity = '0.3';
-            }
-            return;
-        }
-        e.preventDefault();
-        moveClone(e.clientX, e.clientY);
-        // Check for drop target
-        const target = getDropTarget(e.clientX, e.clientY);
-        if (target) {
-            highlightTarget(target);
-        } else {
-            clearHighlight();
-        }
-    }
-
-    function moveDragTouch(e) {
-        if (!dragData) return;
-        const touch = e.touches[0];
-        if (!isDragging) {
-            // Check if moved enough
-            const dx = touch.clientX - dragData.card._touchStart.x;
-            const dy = touch.clientY - dragData.card._touchStart.y;
-            if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-                clearTimeout(dragData.card._longPressTimer);
-                isDragging = true;
-                createClone(touch.clientX, touch.clientY);
-                dragData.card.style.opacity = '0.3';
-                e.preventDefault();
-            }
-            return;
-        }
-        e.preventDefault();
-        moveClone(touch.clientX, touch.clientY);
-        const target = getDropTarget(touch.clientX, touch.clientY);
-        if (target) {
-            highlightTarget(target);
-        } else {
-            clearHighlight();
-        }
-    }
-
-    function endDrag(e) {
-        if (!dragData) return;
-        if (isDragging) {
-            const target = getDropTarget(e.clientX, e.clientY);
-            if (target) {
-                performDrop(target, dragData.id);
-            }
-            cleanupDrag();
-        }
-        // Reset long press timer
-        if (dragData.card) {
-            clearTimeout(dragData.card._longPressTimer);
-            dragData.card.style.opacity = '1';
-        }
-        dragData = null;
-        isDragging = false;
-    }
-
-    function endDragTouch(e) {
-        if (!dragData) return;
-        if (isDragging) {
-            const touch = e.changedTouches[0];
-            const target = getDropTarget(touch.clientX, touch.clientY);
-            if (target) {
-                performDrop(target, dragData.id);
-            }
-            cleanupDrag();
-        }
-        if (dragData.card) {
-            clearTimeout(dragData.card._longPressTimer);
-            dragData.card.style.opacity = '1';
-        }
-        dragData = null;
-        isDragging = false;
-    }
-
-    function createClone(x, y) {
-        if (clone) return;
-        const card = dragData.card;
-        const rect = card.getBoundingClientRect();
-        clone = card.cloneNode(true);
-        clone.style.position = 'fixed';
-        clone.style.pointerEvents = 'none';
-        clone.style.zIndex = '9999';
-        clone.style.width = rect.width + 'px';
-        clone.style.height = rect.height + 'px';
-        clone.style.opacity = '0.8';
-        clone.style.transform = 'scale(1.1)';
-        clone.style.transition = 'none';
-        document.body.appendChild(clone);
-        moveClone(x, y);
-    }
-
-    function moveClone(x, y) {
-        if (!clone) return;
-        const card = dragData.card;
-        const rect = card.getBoundingClientRect();
-        clone.style.left = (x - dragData.offsetX) + 'px';
-        clone.style.top = (y - dragData.offsetY) + 'px';
-    }
-
-    function getDropTarget(x, y) {
-        const elements = document.elementsFromPoint(x, y);
-        for (let el of elements) {
-            const card = el.closest('.app-card');
-            if (card && card.dataset.id !== dragData.id && !card.closest('.edit-item')) {
-                const appId = card.dataset.id;
-                if (appId !== 'edit_shortcuts' && appId !== 'grid_settings') {
-                    return card;
-                }
-            }
-        }
-        return null;
-    }
-
-    function highlightTarget(target) {
-        document.querySelectorAll('.app-card.drag-over').forEach(el => el.classList.remove('drag-over'));
-        if (target) target.classList.add('drag-over');
-    }
-
-    function clearHighlight() {
-        document.querySelectorAll('.app-card.drag-over').forEach(el => el.classList.remove('drag-over'));
-    }
-
-    function performDrop(target, draggedId) {
-        clearHighlight();
-        // Find indices
-        const allCards = Array.from(document.querySelectorAll('.app-card:not([data-id="edit_shortcuts"]):not([data-id="grid_settings"])'));
-        const draggedIndex = allCards.findIndex(c => c.dataset.id === draggedId);
-        const targetIndex = allCards.findIndex(c => c === target);
-        if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return;
-
-        // Reorder appsData
-        const draggedApp = appsData.find(a => a.id === draggedId);
-        const targetApp = appsData.find(a => a.id === target.dataset.id);
-        if (!draggedApp || !targetApp) return;
-
-        // Remove dragged and insert at target position
-        const newApps = appsData.filter(a => a.id !== draggedId);
-        const insertAt = newApps.findIndex(a => a.id === target.dataset.id);
-        newApps.splice(insertAt, 0, draggedApp);
-        appsData = newApps;
-
-        // Save order and re-render
-        saveOrder(appsData).then(() => {
-            renderPages(appsData);
-            // Restore page
-            const container = document.getElementById('appContainer');
-            const pages = container.querySelectorAll('.page');
-            const newPage = Math.min(currentPage, pages.length - 1);
-            currentPage = newPage;
-            container.scrollTo({ left: newPage * container.clientWidth, behavior: 'auto' });
-            updateActiveDot();
-        });
-    }
-
-    function cleanupDrag() {
-        if (clone) {
-            clone.remove();
-            clone = null;
-        }
-        if (dragData && dragData.card) {
-            dragData.card.style.opacity = '1';
-        }
-        clearHighlight();
-        isDragging = false;
-    }
 }
