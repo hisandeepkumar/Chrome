@@ -109,7 +109,6 @@ function createAppCard(app) {
             }
         }).catch(() => {});
     card.innerHTML = `${iconHtml}<span class="name">${app.name}</span>`;
-    // Handle click based on system apps
     card.addEventListener('click', () => {
         if (app.id === 'edit_shortcuts') {
             openEditView();
@@ -122,12 +121,19 @@ function createAppCard(app) {
     return card;
 }
 
+// ---------- Columns and Rows with swap on landscape ----------
 function getCols() {
-    return settings.grid?.cols || 3;
+    const isLandscape = window.innerWidth > window.innerHeight;
+    const cols = settings.grid?.cols || 2;
+    const rows = settings.grid?.rows || 6;
+    return isLandscape ? rows : cols;
 }
 
 function getRows() {
-    return settings.grid?.rows || 4;
+    const isLandscape = window.innerWidth > window.innerHeight;
+    const cols = settings.grid?.cols || 2;
+    const rows = settings.grid?.rows || 6;
+    return isLandscape ? cols : rows;
 }
 
 function updateIndicators(total) {
@@ -305,8 +311,8 @@ function initGridSettings() {
 
     window.openGridSettings = function() {
         const g = settings.grid || {};
-        document.getElementById('gridCols').value = g.cols || 3;
-        document.getElementById('gridRows').value = g.rows || 4;
+        document.getElementById('gridCols').value = g.cols || 2;
+        document.getElementById('gridRows').value = g.rows || 6;
         document.getElementById('iconSize').value = g.icon_size || 64;
         document.getElementById('iconSizeVal').textContent = g.icon_size || 64;
         document.getElementById('glowSize').value = g.glow_size || 20;
@@ -352,8 +358,8 @@ function initGridSettings() {
     });
 
     save.addEventListener('click', async () => {
-        const cols = parseInt(document.getElementById('gridCols').value) || 3;
-        const rows = parseInt(document.getElementById('gridRows').value) || 4;
+        const cols = parseInt(document.getElementById('gridCols').value) || 2;
+        const rows = parseInt(document.getElementById('gridRows').value) || 6;
         const iconSize = parseInt(document.getElementById('iconSize').value) || 64;
         const glowSize = parseInt(document.getElementById('glowSize').value) || 20;
         const blur = parseFloat(document.getElementById('bgBlur').value) || 0;
