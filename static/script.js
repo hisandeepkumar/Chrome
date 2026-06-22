@@ -2,34 +2,33 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchApps();
     fetchSettings();
     initFullscreen();
-    initGridSettings();
+    initSettingsUI();
     initEditView();
     initAddModal();
     setupSwipeDetection();
+    setupOrientationSwitch();
+    setupDock();
+    setupPreview();
 });
 
 // ---------- Global State ----------
 let appsData = [];
 let settings = {};
 let currentPage = 0;
+let currentOrientation = getOrientation();
 
-// ---------- LocalStorage Management ----------
+// ---------- LocalStorage ----------
 function saveSettingsToLocal(settingsObj) {
     try {
         localStorage.setItem('winlauncher_settings', JSON.stringify(settingsObj));
-    } catch(e) {
-        console.warn('LocalStorage full or disabled:', e);
-    }
+    } catch(e) { console.warn('LocalStorage full or disabled:', e); }
 }
 
 function loadSettingsFromLocal() {
     try {
         const cached = localStorage.getItem('winlauncher_settings');
         return cached ? JSON.parse(cached) : null;
-    } catch(e) {
-        console.warn('Error reading LocalStorage:', e);
-        return null;
-    }
+    } catch(e) { return null; }
 }
 
 // ---------- Fetch Apps & Settings ----------
@@ -38,33 +37,26 @@ async function fetchApps() {
         const res = await fetch('/api/apps');
         appsData = await res.json();
         renderPages(appsData);
-    } catch (e) {
-        console.error(e);
-    }
+        updateDockIcons();
+    } catch (e) { console.error(e); }
 }
 
 async function fetchSettings() {
     try {
-        // पहले LocalStorage से try करें (faster)
-        let cachedSettings = loadSettingsFromLocal();
-        if (cachedSettings) {
-            settings = cachedSettings;
+        let cached = loadSettingsFromLocal();
+        if (cached) {
+            settings = cached;
             applySettings();
         }
-        
-        // फिर server से fetch करें (sync के लिए)
         const res = await fetch('/api/settings');
         const serverSettings = await res.json();
-        
-        // अगर server settings अलग हैं तो update करें
-        if (JSON.stringify(serverSettings) !== JSON.stringify(cachedSettings)) {
+        if (JSON.stringify(serverSettings) !== JSON.stringify(cached)) {
             settings = serverSettings;
             saveSettingsToLocal(settings);
             applySettings();
         }
     } catch (e) {
         console.error('Error fetching settings:', e);
-        // अगर server fail हो तो LocalStorage से use करें
         let cached = loadSettingsFromLocal();
         if (cached) {
             settings = cached;
@@ -73,20 +65,53 @@ async function fetchSettings() {
     }
 }
 
+// ---------- Orientation ----------
+function getOrientation() {
+    return window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+}
+
+function setupOrientationSwitch() {
+    window.addEventListener('resize', () => {
+        const newOrientation = getOrientation();
+        if (newOrientation !== currentOrientation) {
+            currentOrientation = newOrientation;
+            renderPages(appsData);
+            applySettings();
+        }
+    });
+}
+
+function getOrientationSettings() {
+    const ori = currentOrientation;
+    return settings[ori] || settings.portrait || {};
+}
+
 // ---------- Render Pages ----------
 function renderPages(apps) {
     const container = document.getElementById('appContainer');
     container.innerHTML = '';
-    const cols = getCols();
-    const rows = getRows();
+    const grid = getOrientationSettings();
+    const cols = grid.cols || 3;
+    const rows = grid.rows || 4;
     const itemsPerPage = cols * rows;
     const totalPages = Math.ceil(apps.length / itemsPerPage) || 1;
+
+    // Apply grid styles
+    const gap = grid.h_gap || 16;
+    const vGap = grid.v_gap || 16;
+    const pad = grid.edge_padding || {top:20, bottom:20, left:20, right:20};
+    const alignment = grid.grid_alignment || 'center';
+
     for (let p = 0; p < totalPages; p++) {
         const page = document.createElement('div');
         page.className = 'page';
         page.dataset.page = p;
         page.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
         page.style.gridTemplateRows = `repeat(${rows}, auto)`;
+        page.style.gap = `${vGap}px ${gap}px`;
+        page.style.padding = `${pad.top}px ${pad.right}px ${pad.bottom}px ${pad.left}px`;
+        page.style.justifyContent = alignment === 'left' ? 'start' : alignment === 'right' ? 'end' : 'center';
+        page.style.alignContent = 'center';
         const pageApps = apps.slice(p * itemsPerPage, (p + 1) * itemsPerPage);
         pageApps.forEach(app => {
             const card = createAppCard(app);
@@ -97,6 +122,7 @@ function renderPages(apps) {
     updateIndicators(totalPages);
     container.scrollLeft = 0;
     currentPage = 0;
+    applyIconStyles();
 }
 
 function createAppCard(app) {
@@ -113,88 +139,690 @@ function createAppCard(app) {
                 }
             }
         }).catch(() => {});
-    card.innerHTML = `${iconHtml}<span class="name">${app.name}</span>`;
+    const label = settings.labels;
+    const hideLabel = label && label.hide;
+    const labelColor = label ? label.color : '#ffffff';
+    const labelShadow = label && label.shadow ? '0 0 5px rgba(0,0,0,0.8)' : 'none';
+    card.innerHTML = `${iconHtml}<span class="name" style="color:${labelColor}; text-shadow:${labelShadow}; ${hideLabel?'display:none;':''}">${app.name}</span>`;
     card.addEventListener('click', () => launchApp(app.id));
     return card;
 }
 
-function getCols() {
-    const isLandscape = window.innerWidth > window.innerHeight;
-    if (isLandscape) return settings.grid?.landscape_cols || 4;
-    return settings.grid?.portrait_cols || 3;
-}
+function applyIconStyles() {
+    const grid = getOrientationSettings();
+    const effects = settings.effects || {};
+    const iconSize = grid.icon_size || 64;
+    const iconShape = grid.icon_shape || 'rounded';
+    const labelFontSize = grid.label_font_size || 12;
+    const glowColor = effects.glow_color || '#ffffff';
+    const glowBrightness = (effects.glow_brightness || 50) / 100;
+    const glowRadius = effects.glow_radius || 20;
+    const shadowStrength = (effects.shadow_strength || 0) / 100;
+    const shadowBlur = effects.shadow_blur || 0;
+    const borderRadius = effects.border_radius || 16;
+    const hoverScale = effects.hover_scale || 1.05;
+    const tapAnim = effects.tap_animation !== false;
 
-function getRows() {
-    const isLandscape = window.innerWidth > window.innerHeight;
-    if (isLandscape) return settings.grid?.landscape_rows || 3;
-    return settings.grid?.portrait_rows || 4;
-}
-
-function updateIndicators(total) {
-    const container = document.getElementById('pageIndicators');
-    container.innerHTML = '';
-    for (let i = 0; i < total; i++) {
-        const dot = document.createElement('span');
-        dot.className = 'dot' + (i === 0 ? ' active' : '');
-        container.appendChild(dot);
-    }
-}
-
-function applySettings() {
-    const g = settings.grid || {};
-    const iconSize = g.icon_size || 64;
-    const glowSize = g.glow_size || 20;
+    // Set CSS variables
     document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
-    document.documentElement.style.setProperty('--glow-size', glowSize + 'px');
-    
-    if (g.bg_type === 'color') {
-        document.body.style.background = g.bg_value || '#000000';
-        document.body.style.backgroundImage = '';
-        document.body.style.backgroundSize = '';
-        document.querySelectorAll('.page').forEach(p => {
-            p.style.background = 'transparent';
-        });
-        // Remove video if any
-        const vid = document.getElementById('bgVideo');
-        if (vid) vid.remove();
-    } else if (g.bg_type === 'image') {
-        if (g.bg_value) {
-            document.body.style.backgroundImage = `url(${g.bg_value})`;
-            document.body.style.backgroundSize = 'cover';
-            document.body.style.backgroundPosition = 'center';
-        }
-        const vid = document.getElementById('bgVideo');
-        if (vid) vid.remove();
-    } else if (g.bg_type === 'video') {
-        let video = document.getElementById('bgVideo');
-        if (!video) {
-            video = document.createElement('video');
-            video.id = 'bgVideo';
-            video.autoplay = true;
-            video.loop = true;
-            video.muted = true;
-            video.style.position = 'fixed';
-            video.style.top = '0';
-            video.style.left = '0';
-            video.style.width = '100%';
-            video.style.height = '100%';
-            video.style.objectFit = 'cover';
-            video.style.zIndex = '-1';
-            document.body.prepend(video);
-        }
-        if (g.bg_value) {
-            video.src = g.bg_value;
-            video.play().catch(() => {});
-        }
-    }
-    const blur = g.blur || 0;
-    document.body.style.backdropFilter = `blur(${blur}px)`;
-    document.querySelectorAll('.page').forEach(p => {
-        p.style.backdropFilter = `blur(${blur}px)`;
+    document.documentElement.style.setProperty('--label-font-size', labelFontSize + 'px');
+    document.documentElement.style.setProperty('--glow-color', glowColor);
+    document.documentElement.style.setProperty('--glow-brightness', glowBrightness);
+    document.documentElement.style.setProperty('--glow-radius', glowRadius + 'px');
+    document.documentElement.style.setProperty('--shadow-strength', shadowStrength);
+    document.documentElement.style.setProperty('--shadow-blur', shadowBlur + 'px');
+    document.documentElement.style.setProperty('--border-radius', borderRadius + 'px');
+    document.documentElement.style.setProperty('--hover-scale', hoverScale);
+    document.documentElement.style.setProperty('--tap-animation', tapAnim ? '0.15s' : '0s');
+
+    // Shape classes
+    const shapeClass = {
+        'square': 'shape-square',
+        'rounded': 'shape-rounded',
+        'circle': 'shape-circle',
+        'squircle': 'shape-squircle'
+    }[iconShape] || 'shape-rounded';
+    document.querySelectorAll('.app-card .icon-img, .app-card .icon').forEach(el => {
+        el.className = el.className.split(' ').filter(c => !c.startsWith('shape-')).join(' ');
+        el.classList.add(shapeClass);
     });
 }
 
-// ---------- Swipe ----------
+// ---------- Apply All Settings ----------
+function applySettings() {
+    applyWallpaper();
+    applyIconStyles();
+    applyDock();
+    updateSettingsUI();
+}
+
+// ---------- Wallpaper ----------
+function applyWallpaper() {
+    const wp = settings.wallpaper || {};
+    const type = wp.type || 'color';
+    const value = wp.value || '#000000';
+    const dim = (wp.dim || 0) / 100;
+    const blur = wp.blur || 0;
+    const zoom = (wp.zoom || 100) / 100;
+    const brightness = (wp.brightness || 100) / 100;
+    const opacity = (wp.opacity || 100) / 100;
+
+    // Remove existing video
+    const oldVideo = document.getElementById('bgVideo');
+    if (oldVideo) oldVideo.remove();
+
+    if (type === 'color') {
+        document.body.style.background = value;
+        document.body.style.backgroundImage = '';
+        document.body.style.backgroundSize = '';
+    } else if (type === 'image') {
+        if (value) {
+            document.body.style.backgroundImage = `url(${value})`;
+            document.body.style.backgroundSize = 'cover';
+            document.body.style.backgroundPosition = 'center';
+        }
+    } else if (type === 'video') {
+        let video = document.createElement('video');
+        video.id = 'bgVideo';
+        video.autoplay = true;
+        video.loop = true;
+        video.muted = true;
+        video.style.position = 'fixed';
+        video.style.top = '0';
+        video.style.left = '0';
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.style.objectFit = 'cover';
+        video.style.zIndex = '-2';
+        if (value) {
+            video.src = value;
+            video.play().catch(() => {});
+        }
+        document.body.prepend(video);
+    }
+
+    // Apply dim, blur, zoom, brightness, opacity via overlay
+    let overlay = document.getElementById('wallpaperOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'wallpaperOverlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.zIndex = '-1';
+        document.body.prepend(overlay);
+    }
+    overlay.style.background = `rgba(0,0,0,${dim})`;
+    overlay.style.backdropFilter = `blur(${blur}px) brightness(${brightness})`;
+    overlay.style.opacity = opacity;
+
+    // Zoom: apply to background-size if image
+    if (type === 'image' && value) {
+        document.body.style.backgroundSize = `${zoom*100}%`;
+    }
+}
+
+// ---------- Dock ----------
+function setupDock() {
+    const container = document.getElementById('dockContainer');
+    const dock = settings.dock || {};
+    if (dock.enabled) {
+        container.style.display = 'flex';
+        container.style.backdropFilter = `blur(${dock.background_blur || 20}px)`;
+        container.style.opacity = (dock.opacity || 80) / 100;
+        container.style.setProperty('--dock-icon-size', (dock.icon_size || 48) + 'px');
+        if (dock.auto_hide) {
+            container.classList.add('dock-auto-hide');
+        } else {
+            container.classList.remove('dock-auto-hide');
+        }
+        renderDockIcons(dock.icons || []);
+    } else {
+        container.style.display = 'none';
+    }
+}
+
+function renderDockIcons(iconIds) {
+    const container = document.getElementById('dockContainer');
+    container.innerHTML = '';
+    iconIds.forEach(id => {
+        const app = appsData.find(a => a.id === id);
+        if (!app) return;
+        const card = document.createElement('div');
+        card.className = 'dock-item';
+        let iconHtml = app.icon || '📦';
+        fetch(`/user-icons/${app.id}.png`, { method: 'HEAD' })
+            .then(res => {
+                if (res.ok) {
+                    card.innerHTML = `<img src="/user-icons/${app.id}.png" alt="icon">`;
+                } else {
+                    card.textContent = iconHtml;
+                }
+            }).catch(() => { card.textContent = iconHtml; });
+        card.addEventListener('click', () => launchApp(app.id));
+        container.appendChild(card);
+    });
+}
+
+function updateDockIcons() {
+    // Called when apps change - refresh dock
+    const dock = settings.dock || {};
+    if (dock.enabled) {
+        renderDockIcons(dock.icons || []);
+    }
+}
+
+// ---------- UI Settings ----------
+function initSettingsUI() {
+    const modal = document.getElementById('settingsModal');
+    const openBtn = document.getElementById('gridSettingsBtn');
+    const closeBtn = document.getElementById('closeSettings');
+    const saveBtn = document.getElementById('saveSettingsBtn');
+
+    openBtn.addEventListener('click', () => {
+        populateSettingsUI();
+        modal.style.display = 'flex';
+    });
+    closeBtn.addEventListener('click', () => modal.style.display = 'none');
+    window.addEventListener('click', (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+    });
+
+    // Tabs
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = 'none');
+            const tabId = btn.dataset.tab;
+            document.getElementById('tab' + tabId.charAt(0).toUpperCase() + tabId.slice(1)).style.display = 'block';
+        });
+    });
+
+    // Range displays
+    document.querySelectorAll('input[type="range"]').forEach(range => {
+        const valSpan = document.getElementById(range.id + 'Val');
+        if (valSpan) {
+            range.addEventListener('input', () => {
+                valSpan.textContent = range.value;
+                // Live preview for effects
+                if (range.id.startsWith('portrait') || range.id.startsWith('landscape')) {
+                    // Grid settings live preview (apply immediately)
+                    applySettings();
+                } else {
+                    // Effects, wallpaper, etc. live preview
+                    applySettings();
+                }
+            });
+        }
+    });
+
+    // Wallpaper type toggle
+    document.getElementById('wallpaperType').addEventListener('change', function() {
+        const isFile = this.value === 'image' || this.value === 'video';
+        document.getElementById('wallpaperColorGroup').style.display = isFile ? 'none' : 'block';
+        document.getElementById('wallpaperFileGroup').style.display = isFile ? 'block' : 'none';
+    });
+
+    // Presets
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const presetName = btn.dataset.preset;
+            applyPreset(presetName);
+        });
+    });
+
+    // Reset default
+    document.getElementById('resetToDefaultBtn').addEventListener('click', () => {
+        if (confirm('Reset all settings to default?')) {
+            resetToDefault();
+        }
+    });
+
+    // Export
+    document.getElementById('exportBtn').addEventListener('click', exportBackup);
+
+    // Import
+    document.getElementById('importFile').addEventListener('change', importBackup);
+
+    // Save
+    saveBtn.addEventListener('click', saveSettings);
+}
+
+function populateSettingsUI() {
+    const gridP = settings.portrait || {};
+    const gridL = settings.landscape || {};
+    const effects = settings.effects || {};
+    const wallpaper = settings.wallpaper || {};
+    const dock = settings.dock || {};
+    const labels = settings.labels || {};
+
+    // Portrait
+    setVal('portraitCols', gridP.cols);
+    setVal('portraitRows', gridP.rows);
+    setVal('portraitIconSize', gridP.icon_size);
+    setVal('portraitIconSizeVal', gridP.icon_size);
+    setSelect('portraitIconShape', gridP.icon_shape || 'rounded');
+    setVal('portraitLabelFontSize', gridP.label_font_size);
+    setVal('portraitHGap', gridP.h_gap);
+    setVal('portraitVGap', gridP.v_gap);
+    setVal('portraitPadTop', gridP.edge_padding?.top);
+    setVal('portraitPadBottom', gridP.edge_padding?.bottom);
+    setVal('portraitPadLeft', gridP.edge_padding?.left);
+    setVal('portraitPadRight', gridP.edge_padding?.right);
+    setSelect('portraitGridAlignment', gridP.grid_alignment || 'center');
+
+    // Landscape
+    setVal('landscapeCols', gridL.cols);
+    setVal('landscapeRows', gridL.rows);
+    setVal('landscapeIconSize', gridL.icon_size);
+    setVal('landscapeIconSizeVal', gridL.icon_size);
+    setSelect('landscapeIconShape', gridL.icon_shape || 'rounded');
+    setVal('landscapeLabelFontSize', gridL.label_font_size);
+    setVal('landscapeHGap', gridL.h_gap);
+    setVal('landscapeVGap', gridL.v_gap);
+    setVal('landscapePadTop', gridL.edge_padding?.top);
+    setVal('landscapePadBottom', gridL.edge_padding?.bottom);
+    setVal('landscapePadLeft', gridL.edge_padding?.left);
+    setVal('landscapePadRight', gridL.edge_padding?.right);
+    setSelect('landscapeGridAlignment', gridL.grid_alignment || 'center');
+
+    // Effects
+    setVal('glowColor', effects.glow_color);
+    setVal('glowBrightness', effects.glow_brightness);
+    setVal('glowBrightnessVal', effects.glow_brightness);
+    setVal('glowRadius', effects.glow_radius);
+    setVal('glowRadiusVal', effects.glow_radius);
+    setVal('shadowStrength', effects.shadow_strength);
+    setVal('shadowStrengthVal', effects.shadow_strength);
+    setVal('shadowBlur', effects.shadow_blur);
+    setVal('shadowBlurVal', effects.shadow_blur);
+    setVal('borderRadius', effects.border_radius);
+    setVal('borderRadiusVal', effects.border_radius);
+    setVal('hoverScale', effects.hover_scale);
+    document.getElementById('tapAnimation').checked = effects.tap_animation !== false;
+
+    // Wallpaper
+    setSelect('wallpaperType', wallpaper.type || 'color');
+    document.getElementById('wallpaperColor').value = wallpaper.value || '#000000';
+    if (wallpaper.type === 'image' || wallpaper.type === 'video') {
+        document.getElementById('wallpaperFileGroup').style.display = 'block';
+        document.getElementById('wallpaperColorGroup').style.display = 'none';
+    } else {
+        document.getElementById('wallpaperFileGroup').style.display = 'none';
+        document.getElementById('wallpaperColorGroup').style.display = 'block';
+    }
+    setVal('wallpaperDim', wallpaper.dim);
+    setVal('wallpaperDimVal', wallpaper.dim);
+    setVal('wallpaperBlur', wallpaper.blur);
+    setVal('wallpaperBlurVal', wallpaper.blur);
+    setVal('wallpaperZoom', wallpaper.zoom);
+    setVal('wallpaperZoomVal', wallpaper.zoom);
+    setVal('wallpaperBrightness', wallpaper.brightness);
+    setVal('wallpaperBrightnessVal', wallpaper.brightness);
+    setVal('wallpaperOpacity', wallpaper.opacity);
+    setVal('wallpaperOpacityVal', wallpaper.opacity);
+
+    // Dock
+    document.getElementById('dockEnabled').checked = dock.enabled || false;
+    setVal('dockBlur', dock.background_blur);
+    setVal('dockBlurVal', dock.background_blur);
+    setVal('dockOpacity', dock.opacity);
+    setVal('dockOpacityVal', dock.opacity);
+    setVal('dockIconSize', dock.icon_size);
+    setVal('dockIconSizeVal', dock.icon_size);
+    document.getElementById('dockAutoHide').checked = dock.auto_hide || false;
+    // Populate dock icon selector
+    const selector = document.getElementById('dockIconSelector');
+    selector.innerHTML = '';
+    appsData.forEach(app => {
+        const label = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = app.id;
+        cb.checked = (dock.icons || []).includes(app.id);
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(app.name || app.id));
+        selector.appendChild(label);
+    });
+
+    // Labels
+    document.getElementById('labelsHide').checked = labels.hide || false;
+    document.getElementById('labelsShow').checked = labels.show !== false;
+    document.getElementById('labelColor').value = labels.color || '#ffffff';
+    document.getElementById('labelShadow').checked = labels.shadow || false;
+
+    // Current preset
+    document.getElementById('currentPresetLabel').textContent = settings.presets?.current || 'default';
+}
+
+function setVal(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.value = val !== undefined ? val : '';
+}
+
+function setSelect(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.value = val || '';
+}
+
+function updateSettingsUI() {
+    // Update UI to reflect current settings (called after apply)
+    // Not needed for now, but we can keep for consistency
+}
+
+// ---------- Save Settings ----------
+async function saveSettings() {
+    const gridP = getGridFromUI('portrait');
+    const gridL = getGridFromUI('landscape');
+    const effects = {
+        glow_color: document.getElementById('glowColor').value,
+        glow_brightness: parseInt(document.getElementById('glowBrightness').value) || 50,
+        glow_radius: parseInt(document.getElementById('glowRadius').value) || 20,
+        shadow_strength: parseInt(document.getElementById('shadowStrength').value) || 0,
+        shadow_blur: parseInt(document.getElementById('shadowBlur').value) || 0,
+        border_radius: parseInt(document.getElementById('borderRadius').value) || 16,
+        hover_scale: parseFloat(document.getElementById('hoverScale').value) || 1.05,
+        tap_animation: document.getElementById('tapAnimation').checked
+    };
+    const wallpaper = {
+        type: document.getElementById('wallpaperType').value,
+        value: document.getElementById('wallpaperColor').value,
+        dim: parseInt(document.getElementById('wallpaperDim').value) || 0,
+        blur: parseFloat(document.getElementById('wallpaperBlur').value) || 0,
+        zoom: parseInt(document.getElementById('wallpaperZoom').value) || 100,
+        brightness: parseInt(document.getElementById('wallpaperBrightness').value) || 100,
+        opacity: parseInt(document.getElementById('wallpaperOpacity').value) || 100
+    };
+    // Handle file upload for wallpaper
+    const fileInput = document.getElementById('wallpaperFile');
+    if (fileInput.files.length > 0 && (wallpaper.type === 'image' || wallpaper.type === 'video')) {
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append('wallpaper', file);
+        try {
+            const res = await fetch('/api/upload_wallpaper', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.path) {
+                wallpaper.value = data.path;
+            } else {
+                alert('Failed to upload wallpaper');
+                return;
+            }
+        } catch (e) {
+            alert('Upload error');
+            return;
+        }
+    }
+
+    const dock = {
+        enabled: document.getElementById('dockEnabled').checked,
+        icons: Array.from(document.querySelectorAll('#dockIconSelector input:checked')).map(cb => cb.value),
+        background_blur: parseInt(document.getElementById('dockBlur').value) || 20,
+        opacity: parseInt(document.getElementById('dockOpacity').value) || 80,
+        icon_size: parseInt(document.getElementById('dockIconSize').value) || 48,
+        auto_hide: document.getElementById('dockAutoHide').checked
+    };
+    const labels = {
+        hide: document.getElementById('labelsHide').checked,
+        show: document.getElementById('labelsShow').checked,
+        color: document.getElementById('labelColor').value,
+        shadow: document.getElementById('labelShadow').checked
+    };
+    const presets = settings.presets || { current: 'default', list: {} };
+
+    const newSettings = {
+        version: '2.0',
+        portrait: gridP,
+        landscape: gridL,
+        effects,
+        wallpaper,
+        dock,
+        labels,
+        presets
+    };
+
+    settings = newSettings;
+    saveSettingsToLocal(settings);
+    applySettings();
+    renderPages(appsData);
+
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newSettings)
+        });
+        const data = await res.json();
+        document.getElementById('settingsMsg').textContent = data.message || 'Saved!';
+        setTimeout(() => document.getElementById('settingsMsg').textContent = '', 2000);
+    } catch (e) {
+        document.getElementById('settingsMsg').textContent = '⚠️ Offline - Settings cached locally';
+    }
+}
+
+function getGridFromUI(prefix) {
+    return {
+        cols: parseInt(document.getElementById(prefix + 'Cols').value) || 3,
+        rows: parseInt(document.getElementById(prefix + 'Rows').value) || 4,
+        icon_size: parseInt(document.getElementById(prefix + 'IconSize').value) || 64,
+        icon_shape: document.getElementById(prefix + 'IconShape').value,
+        label_font_size: parseInt(document.getElementById(prefix + 'LabelFontSize').value) || 12,
+        h_gap: parseInt(document.getElementById(prefix + 'HGap').value) || 16,
+        v_gap: parseInt(document.getElementById(prefix + 'VGap').value) || 16,
+        edge_padding: {
+            top: parseInt(document.getElementById(prefix + 'PadTop').value) || 20,
+            bottom: parseInt(document.getElementById(prefix + 'PadBottom').value) || 20,
+            left: parseInt(document.getElementById(prefix + 'PadLeft').value) || 20,
+            right: parseInt(document.getElementById(prefix + 'PadRight').value) || 20
+        },
+        grid_alignment: document.getElementById(prefix + 'GridAlignment').value || 'center'
+    };
+}
+
+// ---------- Presets ----------
+function applyPreset(name) {
+    const presets = {
+        'Apple Clean': {
+            portrait: { cols:3, rows:4, icon_size:64, icon_shape:'squircle', label_font_size:14, h_gap:20, v_gap:20, edge_padding:{top:30,bottom:30,left:20,right:20}, grid_alignment:'center' },
+            landscape: { cols:4, rows:3, icon_size:60, icon_shape:'squircle', label_font_size:14, h_gap:20, v_gap:20, edge_padding:{top:30,bottom:30,left:20,right:20}, grid_alignment:'center' },
+            effects: { glow_color:'#ffffff', glow_brightness:40, glow_radius:20, shadow_strength:10, shadow_blur:10, border_radius:20, hover_scale:1.05, tap_animation:true },
+            wallpaper: { type:'color', value:'#1a1a1a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
+            dock: { enabled:true, icons:['whatsapp','youtube','gmail','chatgpt','deepseek'], background_blur:30, opacity:85, icon_size:50, auto_hide:false },
+            labels: { hide:false, show:true, color:'#ffffff', shadow:true }
+        },
+        'Samsung OneUI': {
+            portrait: { cols:4, rows:5, icon_size:60, icon_shape:'rounded', label_font_size:11, h_gap:10, v_gap:10, edge_padding:{top:10,bottom:10,left:10,right:10}, grid_alignment:'center' },
+            landscape: { cols:5, rows:4, icon_size:55, icon_shape:'rounded', label_font_size:11, h_gap:10, v_gap:10, edge_padding:{top:10,bottom:10,left:10,right:10}, grid_alignment:'center' },
+            effects: { glow_color:'#00aaff', glow_brightness:30, glow_radius:15, shadow_strength:20, shadow_blur:15, border_radius:12, hover_scale:1.05, tap_animation:true },
+            wallpaper: { type:'color', value:'#0a0a0a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
+            dock: { enabled:true, icons:['whatsapp','youtube','gmail','chatgpt','deepseek'], background_blur:20, opacity:90, icon_size:45, auto_hide:false },
+            labels: { hide:false, show:true, color:'#cccccc', shadow:false }
+        },
+        'Windows 11': {
+            portrait: { cols:3, rows:3, icon_size:80, icon_shape:'square', label_font_size:12, h_gap:20, v_gap:20, edge_padding:{top:40,bottom:40,left:20,right:20}, grid_alignment:'center' },
+            landscape: { cols:4, rows:2, icon_size:70, icon_shape:'square', label_font_size:12, h_gap:20, v_gap:20, edge_padding:{top:40,bottom:40,left:20,right:20}, grid_alignment:'center' },
+            effects: { glow_color:'#0078d4', glow_brightness:20, glow_radius:10, shadow_strength:30, shadow_blur:20, border_radius:0, hover_scale:1.02, tap_animation:true },
+            wallpaper: { type:'color', value:'#1a1a2e', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
+            dock: { enabled:true, icons:['explorer','notepad','calc','cmd','control'], background_blur:10, opacity:95, icon_size:45, auto_hide:false },
+            labels: { hide:false, show:true, color:'#ffffff', shadow:false }
+        },
+        'AMOLED Black': {
+            portrait: { cols:4, rows:5, icon_size:56, icon_shape:'circle', label_font_size:11, h_gap:8, v_gap:8, edge_padding:{top:10,bottom:10,left:10,right:10}, grid_alignment:'center' },
+            landscape: { cols:5, rows:4, icon_size:52, icon_shape:'circle', label_font_size:11, h_gap:8, v_gap:8, edge_padding:{top:10,bottom:10,left:10,right:10}, grid_alignment:'center' },
+            effects: { glow_color:'#00ffcc', glow_brightness:60, glow_radius:25, shadow_strength:0, shadow_blur:0, border_radius:50, hover_scale:1.1, tap_animation:true },
+            wallpaper: { type:'color', value:'#000000', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
+            dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
+            labels: { hide:false, show:true, color:'#00ffcc', shadow:true }
+        },
+        'RGB Gaming': {
+            portrait: { cols:3, rows:4, icon_size:72, icon_shape:'rounded', label_font_size:14, h_gap:16, v_gap:16, edge_padding:{top:20,bottom:20,left:20,right:20}, grid_alignment:'center' },
+            landscape: { cols:4, rows:3, icon_size:68, icon_shape:'rounded', label_font_size:14, h_gap:16, v_gap:16, edge_padding:{top:20,bottom:20,left:20,right:20}, grid_alignment:'center' },
+            effects: { glow_color:'#ff00ff', glow_brightness:80, glow_radius:30, shadow_strength:20, shadow_blur:20, border_radius:16, hover_scale:1.15, tap_animation:true },
+            wallpaper: { type:'color', value:'#0a0a0a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
+            dock: { enabled:true, icons:['whatsapp','youtube','chatgpt','deepseek','gmail'], background_blur:5, opacity:70, icon_size:55, auto_hide:true },
+            labels: { hide:false, show:true, color:'#ff00ff', shadow:true }
+        },
+        'Minimal': {
+            portrait: { cols:3, rows:3, icon_size:48, icon_shape:'square', label_font_size:10, h_gap:20, v_gap:20, edge_padding:{top:60,bottom:60,left:20,right:20}, grid_alignment:'center' },
+            landscape: { cols:4, rows:2, icon_size:44, icon_shape:'square', label_font_size:10, h_gap:20, v_gap:20, edge_padding:{top:60,bottom:60,left:20,right:20}, grid_alignment:'center' },
+            effects: { glow_color:'#ffffff', glow_brightness:10, glow_radius:5, shadow_strength:0, shadow_blur:0, border_radius:0, hover_scale:1.02, tap_animation:false },
+            wallpaper: { type:'color', value:'#1a1a1a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
+            dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
+            labels: { hide:true, show:false, color:'#ffffff', shadow:false }
+        },
+        'Large Icons': {
+            portrait: { cols:2, rows:3, icon_size:120, icon_shape:'rounded', label_font_size:16, h_gap:30, v_gap:30, edge_padding:{top:20,bottom:20,left:20,right:20}, grid_alignment:'center' },
+            landscape: { cols:3, rows:2, icon_size:110, icon_shape:'rounded', label_font_size:16, h_gap:30, v_gap:30, edge_padding:{top:20,bottom:20,left:20,right:20}, grid_alignment:'center' },
+            effects: { glow_color:'#ffffff', glow_brightness:60, glow_radius:30, shadow_strength:30, shadow_blur:20, border_radius:24, hover_scale:1.05, tap_animation:true },
+            wallpaper: { type:'color', value:'#0a0a0a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
+            dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
+            labels: { hide:false, show:true, color:'#ffffff', shadow:true }
+        },
+        'Compact Grid': {
+            portrait: { cols:5, rows:6, icon_size:44, icon_shape:'square', label_font_size:9, h_gap:4, v_gap:4, edge_padding:{top:5,bottom:5,left:5,right:5}, grid_alignment:'center' },
+            landscape: { cols:6, rows:5, icon_size:40, icon_shape:'square', label_font_size:9, h_gap:4, v_gap:4, edge_padding:{top:5,bottom:5,left:5,right:5}, grid_alignment:'center' },
+            effects: { glow_color:'#ffffff', glow_brightness:0, glow_radius:0, shadow_strength:0, shadow_blur:0, border_radius:0, hover_scale:1.0, tap_animation:false },
+            wallpaper: { type:'color', value:'#000000', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
+            dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
+            labels: { hide:false, show:true, color:'#888888', shadow:false }
+        }
+    };
+
+    const presetData = presets[name];
+    if (!presetData) return;
+
+    // Merge with existing settings to preserve presets list
+    const newSettings = {
+        version: '2.0',
+        portrait: presetData.portrait,
+        landscape: presetData.landscape,
+        effects: presetData.effects,
+        wallpaper: presetData.wallpaper,
+        dock: presetData.dock,
+        labels: presetData.labels,
+        presets: settings.presets || { current: name, list: {} }
+    };
+    settings = newSettings;
+    saveSettingsToLocal(settings);
+    applySettings();
+    renderPages(appsData);
+    document.getElementById('currentPresetLabel').textContent = name;
+    // Save to server
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSettings)
+    }).catch(console.error);
+}
+
+function resetToDefault() {
+    // Reload default settings (v2)
+    const defaultSettings = {
+        version: '2.0',
+        portrait: { cols:3, rows:4, icon_size:64, icon_shape:'rounded', label_font_size:12, h_gap:16, v_gap:16, edge_padding:{top:20,bottom:20,left:20,right:20}, grid_alignment:'center' },
+        landscape: { cols:4, rows:3, icon_size:64, icon_shape:'rounded', label_font_size:12, h_gap:16, v_gap:16, edge_padding:{top:20,bottom:20,left:20,right:20}, grid_alignment:'center' },
+        effects: { glow_color:'#ffffff', glow_brightness:50, glow_radius:20, shadow_strength:0, shadow_blur:0, border_radius:16, hover_scale:1.05, tap_animation:true },
+        wallpaper: { type:'color', value:'#000000', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
+        dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
+        labels: { hide:false, show:true, color:'#ffffff', shadow:false },
+        presets: { current:'default', list:{} }
+    };
+    settings = defaultSettings;
+    saveSettingsToLocal(settings);
+    applySettings();
+    renderPages(appsData);
+    document.getElementById('currentPresetLabel').textContent = 'default';
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(defaultSettings)
+    }).catch(console.error);
+}
+
+// ---------- Export/Import ----------
+async function exportBackup() {
+    try {
+        const res = await fetch('/api/export');
+        const blob = await res.blob();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'WinLauncherBackup.wlbackup';
+        link.click();
+        URL.revokeObjectURL(link.href);
+    } catch (e) {
+        document.getElementById('backupMsg').textContent = '❌ Export failed';
+    }
+}
+
+async function importBackup(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('backup', file);
+    try {
+        const res = await fetch('/api/import', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+            alert('Import successful! Reloading...');
+            location.reload();
+        } else {
+            document.getElementById('backupMsg').textContent = '❌ ' + (data.msg || 'Import failed');
+        }
+    } catch (e) {
+        document.getElementById('backupMsg').textContent = '❌ Network error';
+    }
+}
+
+// ---------- Preview ----------
+function setupPreview() {
+    // Effects live preview
+    document.querySelectorAll('#tabEffects input, #tabEffects select').forEach(el => {
+        el.addEventListener('input', () => {
+            // Update preview card
+            const card = document.getElementById('previewApp');
+            const icon = card.querySelector('.icon');
+            const name = card.querySelector('.name');
+            // Apply current effects
+            const effects = {
+                glow_color: document.getElementById('glowColor').value,
+                glow_brightness: parseInt(document.getElementById('glowBrightness').value) / 100,
+                glow_radius: parseInt(document.getElementById('glowRadius').value),
+                shadow_strength: parseInt(document.getElementById('shadowStrength').value) / 100,
+                shadow_blur: parseInt(document.getElementById('shadowBlur').value),
+                border_radius: parseInt(document.getElementById('borderRadius').value),
+                hover_scale: parseFloat(document.getElementById('hoverScale').value),
+                tap_animation: document.getElementById('tapAnimation').checked
+            };
+            // Apply to preview
+            icon.style.filter = `drop-shadow(0 0 ${effects.glow_radius}px rgba(${hexToRgb(effects.glow_color)}, ${effects.glow_brightness}))`;
+            icon.style.borderRadius = effects.border_radius + 'px';
+            card.style.transform = `scale(${effects.hover_scale})`;
+            // Shadow
+            if (effects.shadow_strength > 0) {
+                card.style.boxShadow = `0 ${effects.shadow_strength*20}px ${effects.shadow_blur}px rgba(0,0,0,${effects.shadow_strength})`;
+            } else {
+                card.style.boxShadow = 'none';
+            }
+        });
+    });
+}
+
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1],16)},${parseInt(result[2],16)},${parseInt(result[3],16)}` : '255,255,255';
+}
+
+// ---------- Swipe, Edit, Launch, Fullscreen (unchanged) ----------
 function setupSwipeDetection() {
     const container = document.getElementById('appContainer');
     let startX = 0, startY = 0, isSwiping = false;
@@ -232,21 +860,6 @@ function setupSwipeDetection() {
             }
         }
     }, { passive: true });
-    container.addEventListener('wheel', (e) => {
-        if (e.deltaX !== 0) {
-            e.preventDefault();
-            const pages = container.querySelectorAll('.page');
-            const total = pages.length;
-            let newPage = currentPage;
-            if (e.deltaX > 0 && currentPage < total - 1) newPage++;
-            else if (e.deltaX < 0 && currentPage > 0) newPage--;
-            if (newPage !== currentPage) {
-                currentPage = newPage;
-                container.scrollTo({ left: currentPage * container.clientWidth, behavior: 'smooth' });
-                updateActiveDot();
-            }
-        }
-    }, { passive: false });
     container.addEventListener('scroll', () => {
         const pageWidth = container.clientWidth;
         const newPage = Math.round(container.scrollLeft / pageWidth);
@@ -264,182 +877,37 @@ function updateActiveDot() {
     });
 }
 
-// ---------- Launch ----------
+function updateIndicators(total) {
+    const container = document.getElementById('pageIndicators');
+    container.innerHTML = '';
+    for (let i = 0; i < total; i++) {
+        const dot = document.createElement('span');
+        dot.className = 'dot' + (i === 0 ? ' active' : '');
+        container.appendChild(dot);
+    }
+}
+
 async function launchApp(id) {
     try {
         await fetch(`/api/launch/${id}`);
     } catch (e) {}
 }
 
-// ---------- Fullscreen ----------
 function initFullscreen() {
-    const btn = document.getElementById('fullscreenBtn');
-    btn.addEventListener('click', toggleFullscreen);
-}
-
-function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => console.log(err));
-    } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        }
-    }
-}
-
-// ---------- Grid Settings ----------
-function initGridSettings() {
-    const btn = document.getElementById('gridSettingsBtn');
-    const modal = document.getElementById('gridSettingsModal');
-    const close = document.getElementById('closeSettings');
-    const save = document.getElementById('saveSettingsBtn');
-
-    btn.addEventListener('click', () => {
-        const g = settings.grid || {};
-        document.getElementById('portraitCols').value = g.portrait_cols || 3;
-        document.getElementById('portraitRows').value = g.portrait_rows || 4;
-        document.getElementById('landscapeCols').value = g.landscape_cols || 4;
-        document.getElementById('landscapeRows').value = g.landscape_rows || 3;
-        document.getElementById('iconSize').value = g.icon_size || 64;
-        document.getElementById('iconSizeVal').textContent = g.icon_size || 64;
-        document.getElementById('glowSize').value = g.glow_size || 20;
-        document.getElementById('glowSizeVal').textContent = g.glow_size || 20;
-        document.getElementById('bgBlur').value = g.blur || 0;
-        document.getElementById('bgBlurVal').textContent = g.blur || 0;
-        document.getElementById('bgType').value = g.bg_type || 'color';
-        document.getElementById('bgColor').value = g.bg_value || '#000000';
-        document.getElementById('settingsMsg').textContent = '';
-        if (g.bg_type === 'image' || g.bg_type === 'video') {
-            document.getElementById('bgFileGroup').style.display = 'block';
-            document.getElementById('bgColorGroup').style.display = 'none';
+    document.getElementById('fullscreenBtn').addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(console.log);
         } else {
-            document.getElementById('bgFileGroup').style.display = 'none';
-            document.getElementById('bgColorGroup').style.display = 'block';
-        }
-        modal.style.display = 'flex';
-    });
-
-    close.addEventListener('click', () => modal.style.display = 'none');
-    window.addEventListener('click', (e) => {
-        if (e.target === modal) modal.style.display = 'none';
-    });
-
-    document.getElementById('iconSize').addEventListener('input', function() {
-        document.getElementById('iconSizeVal').textContent = this.value;
-    });
-    document.getElementById('glowSize').addEventListener('input', function() {
-        document.getElementById('glowSizeVal').textContent = this.value;
-    });
-    document.getElementById('bgBlur').addEventListener('input', function() {
-        document.getElementById('bgBlurVal').textContent = this.value;
-    });
-
-    document.getElementById('bgType').addEventListener('change', function() {
-        if (this.value === 'color') {
-            document.getElementById('bgColorGroup').style.display = 'block';
-            document.getElementById('bgFileGroup').style.display = 'none';
-        } else {
-            document.getElementById('bgColorGroup').style.display = 'none';
-            document.getElementById('bgFileGroup').style.display = 'block';
-        }
-    });
-
-    save.addEventListener('click', async () => {
-        const portraitCols = parseInt(document.getElementById('portraitCols').value) || 3;
-        const portraitRows = parseInt(document.getElementById('portraitRows').value) || 4;
-        const landscapeCols = parseInt(document.getElementById('landscapeCols').value) || 4;
-        const landscapeRows = parseInt(document.getElementById('landscapeRows').value) || 3;
-        const iconSize = parseInt(document.getElementById('iconSize').value) || 64;
-        const glowSize = parseInt(document.getElementById('glowSize').value) || 20;
-        const blur = parseFloat(document.getElementById('bgBlur').value) || 0;
-        const bgType = document.getElementById('bgType').value;
-        let bgValue = '';
-        
-        document.getElementById('settingsMsg').textContent = '⏳ Saving...';
-        
-        if (bgType === 'color') {
-            bgValue = document.getElementById('bgColor').value;
-            await saveSettingsToServer(portraitCols, portraitRows, landscapeCols, landscapeRows, iconSize, glowSize, blur, bgType, bgValue);
-            modal.style.display = 'none';
-        } else {
-            // Image या Video के लिए
-            const fileInput = document.getElementById('bgFile');
-            if (fileInput.files.length > 0) {
-                const file = fileInput.files[0];
-                
-                // Check file size (max 2MB for localStorage, 5MB for server)
-                if (file.size > 5 * 1024 * 1024) {
-                    document.getElementById('settingsMsg').textContent = '❌ File too large (max 5MB)';
-                    return;
-                }
-                
-                const reader = new FileReader();
-                reader.onload = async function(e) {
-                    bgValue = e.target.result;
-                    await saveSettingsToServer(portraitCols, portraitRows, landscapeCols, landscapeRows, iconSize, glowSize, blur, bgType, bgValue);
-                    modal.style.display = 'none';
-                };
-                reader.onerror = function() {
-                    document.getElementById('settingsMsg').textContent = '❌ Error reading file';
-                };
-                reader.readAsDataURL(file);
-            } else {
-                bgValue = settings.grid?.bg_value || '';
-                await saveSettingsToServer(portraitCols, portraitRows, landscapeCols, landscapeRows, iconSize, glowSize, blur, bgType, bgValue);
-                modal.style.display = 'none';
-            }
+            if (document.exitFullscreen) document.exitFullscreen();
         }
     });
 }
 
-async function saveSettingsToServer(portraitCols, portraitRows, landscapeCols, landscapeRows, iconSize, glowSize, blur, bgType, bgValue) {
-    const newSettings = {
-        grid: {
-            portrait_cols: portraitCols,
-            portrait_rows: portraitRows,
-            landscape_cols: landscapeCols,
-            landscape_rows: landscapeRows,
-            icon_size: iconSize,
-            glow_size: glowSize,
-            blur: blur,
-            bg_type: bgType,
-            bg_value: bgValue
-        }
-    };
-    
-    // पहले LocalStorage में save करें (instant)
-    saveSettingsToLocal(newSettings);
-    settings = newSettings;
-    applySettings();
-    renderPages(appsData);
-    
-    try {
-        const res = await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newSettings)
-        });
-        
-        if (res.ok) {
-            document.getElementById('settingsMsg').textContent = '✅ Settings saved successfully!';
-            setTimeout(() => {
-                document.getElementById('settingsMsg').textContent = '';
-            }, 2000);
-        } else {
-            document.getElementById('settingsMsg').textContent = '⚠️ Server save failed, but local cache updated';
-        }
-    } catch (e) {
-        console.error('Save error:', e);
-        document.getElementById('settingsMsg').textContent = '⚠️ Offline - Settings cached locally';
-    }
-}
-
-// ---------- Edit View ----------
+// ---------- Edit View (unchanged) ----------
 function initEditView() {
     const editBtn = document.getElementById('editBtn');
     const closeEdit = document.getElementById('closeEdit');
     const addMoreBtn = document.getElementById('addMoreBtn');
-
     editBtn.addEventListener('click', openEditView);
     closeEdit.addEventListener('click', closeEditView);
     addMoreBtn.addEventListener('click', () => openModal(null));
@@ -560,7 +1028,7 @@ async function deleteApp(id) {
     }
 }
 
-// ---------- Add/Edit Modal ----------
+// ---------- Add/Edit Modal (unchanged) ----------
 function initAddModal() {
     const closeModal = document.getElementById('closeModal');
     const saveAppBtn = document.getElementById('saveAppBtn');
