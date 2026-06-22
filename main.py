@@ -32,7 +32,7 @@ os.makedirs(PWA_ICON_DIR, exist_ok=True)
 # ---------- Flask Setup ----------
 app = Flask(__name__, static_folder='static', template_folder='templates')
 PORT = 5000
-app.config['MAX_CONTENT_LENGTH'] = 512 * 1024 * 1024  # 512 MB for large videos
+app.config['MAX_CONTENT_LENGTH'] = 512 * 1024 * 1024  # 512 MB
 
 # ---------- Generate PWA Icons ----------
 def generate_pwa_icons():
@@ -52,30 +52,24 @@ generate_pwa_icons()
 
 # ---------- Default Apps ----------
 DEFAULT_APPS = [
-    # Web Apps
     {"id": "whatsapp", "name": "WhatsApp", "path": "https://web.whatsapp.com", "icon": "💬"},
     {"id": "youtube", "name": "YouTube", "path": "https://youtube.com", "icon": "▶️"},
     {"id": "deepseek", "name": "DeepSeek", "path": "https://chat.deepseek.com", "icon": "🤖"},
     {"id": "chatgpt", "name": "ChatGPT", "path": "https://chatgpt.com", "icon": "✨"},
     {"id": "gmail", "name": "Gmail", "path": "https://gmail.com", "icon": "📧"},
     {"id": "newtab", "name": "New Tab", "path": "about:blank", "icon": "➕"},
-    # System Settings
     {"id": "wifi", "name": "WiFi", "path": "ms-settings:network-wifi", "icon": "📶"},
     {"id": "bluetooth", "name": "Bluetooth", "path": "ms-settings:bluetooth", "icon": "📳"},
     {"id": "display", "name": "Display", "path": "ms-settings:display", "icon": "🖥️"},
     {"id": "sound", "name": "Sound", "path": "ms-settings:sound", "icon": "🔊"},
-    # Volume Control
     {"id": "volup", "name": "Volume +", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]175)", "icon": "🔊+"},
     {"id": "voldown", "name": "Volume -", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]174)", "icon": "🔊-"},
-    # Brightness Control
     {"id": "brightup", "name": "Brightness +", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,100)", "icon": "☀️+"},
     {"id": "brightdown", "name": "Brightness -", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,50)", "icon": "☀️-"},
-    # Utility
     {"id": "lockpc", "name": "Lock PC", "path": "rundll32.exe user32.dll,LockWorkStation", "icon": "🔒"},
     {"id": "taskmgr", "name": "Task Manager", "path": "taskmgr.exe", "icon": "⚙️"},
     {"id": "snipping", "name": "Snipping Tool", "path": "SnippingTool.exe", "icon": "✂️"},
     {"id": "control", "name": "Control Panel", "path": "control.exe", "icon": "📟"},
-    # Common Apps
     {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "📝"},
     {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "🧮"},
     {"id": "explorer", "name": "Explorer", "path": "explorer.exe", "icon": "📁"},
@@ -93,7 +87,7 @@ DEFAULT_SETTINGS_V2 = {
         "label_font_size": 12,
         "h_gap": 16,
         "v_gap": 16,
-        "edge_padding": {"top": 20, "bottom": 20, "left": 20, "right": 20},
+        "padding": 20,   # single value for all sides
         "grid_alignment": "center"
     },
     "landscape": {
@@ -104,7 +98,7 @@ DEFAULT_SETTINGS_V2 = {
         "label_font_size": 12,
         "h_gap": 16,
         "v_gap": 16,
-        "edge_padding": {"top": 20, "bottom": 20, "left": 20, "right": 20},
+        "padding": 20,
         "grid_alignment": "center"
     },
     "effects": {
@@ -146,13 +140,9 @@ DEFAULT_SETTINGS_V2 = {
     }
 }
 
-# ---------- Migration from old settings ----------
 def migrate_settings(old_data):
-    """Convert old settings (v1) to new v2 format."""
     old_settings = old_data.get('settings', {})
     old_grid = old_settings.get('grid', {})
-    
-    # Build new structure
     new_settings = {
         "version": "2.0",
         "portrait": {
@@ -163,7 +153,7 @@ def migrate_settings(old_data):
             "label_font_size": 12,
             "h_gap": 16,
             "v_gap": 16,
-            "edge_padding": {"top": 20, "bottom": 20, "left": 20, "right": 20},
+            "padding": 20,
             "grid_alignment": "center"
         },
         "landscape": {
@@ -174,7 +164,7 @@ def migrate_settings(old_data):
             "label_font_size": 12,
             "h_gap": 16,
             "v_gap": 16,
-            "edge_padding": {"top": 20, "bottom": 20, "left": 20, "right": 20},
+            "padding": 20,
             "grid_alignment": "center"
         },
         "effects": {
@@ -219,7 +209,6 @@ def migrate_settings(old_data):
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        # Create new config with v2 settings
         data = {"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS_V2}
         with open(CONFIG_FILE, 'w') as f:
             json.dump(data, f, indent=4)
@@ -228,16 +217,12 @@ def load_config():
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
 
-    # Check version
     settings = data.get('settings', {})
     if 'version' not in settings or settings['version'] != '2.0':
-        # Migrate
         new_settings = migrate_settings(data)
         data['settings'] = new_settings
-        # Ensure apps exist
         if 'apps' not in data or not data['apps']:
             data['apps'] = DEFAULT_APPS
-        # Merge default apps that are missing
         existing_ids = {app['id'] for app in data.get('apps', [])}
         for default_app in DEFAULT_APPS:
             if default_app['id'] not in existing_ids:
@@ -245,15 +230,18 @@ def load_config():
         with open(CONFIG_FILE, 'w') as f:
             json.dump(data, f, indent=4)
     else:
-        # Already v2: ensure all default apps exist
         existing_ids = {app['id'] for app in data.get('apps', [])}
         for default_app in DEFAULT_APPS:
             if default_app['id'] not in existing_ids:
                 data['apps'].append(default_app)
-        # Ensure all settings keys exist
+        # Ensure all keys exist
         for key in DEFAULT_SETTINGS_V2:
             if key not in data['settings']:
                 data['settings'][key] = DEFAULT_SETTINGS_V2[key]
+        # Ensure padding exists
+        for ori in ['portrait', 'landscape']:
+            if 'padding' not in data['settings'].get(ori, {}):
+                data['settings'][ori]['padding'] = 20
         with open(CONFIG_FILE, 'w') as f:
             json.dump(data, f, indent=4)
 
@@ -292,7 +280,6 @@ def get_apps():
 
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
-    # Ensure all keys exist
     settings = config_data.get('settings', {})
     if 'version' not in settings or settings['version'] != '2.0':
         settings = migrate_settings(config_data)
@@ -305,9 +292,15 @@ def save_settings():
     new_settings = request.json
     if not isinstance(new_settings, dict):
         return jsonify({"status": "error", "msg": "Invalid settings format"}), 400
+    # Ensure version
     new_settings['version'] = '2.0'
+    # Ensure padding exists
+    for ori in ['portrait', 'landscape']:
+        if 'padding' not in new_settings.get(ori, {}):
+            new_settings[ori]['padding'] = 20
     config_data['settings'] = new_settings
     save_config(config_data)
+    print("✅ Settings saved to disk")
     return jsonify({"status": "ok", "message": "Settings saved"})
 
 @app.route('/api/apps', methods=['POST'])
@@ -391,7 +384,6 @@ def launch_app(app_id):
                 return jsonify({"status": "error", "msg": str(e)}), 500
     return jsonify({"status": "not_found"}), 404
 
-# ---------- Wallpaper Upload Endpoint ----------
 @app.route('/api/upload_wallpaper', methods=['POST'])
 def upload_wallpaper():
     if 'wallpaper' not in request.files:
@@ -399,16 +391,13 @@ def upload_wallpaper():
     file = request.files['wallpaper']
     if file.filename == '':
         return jsonify({"status": "error", "msg": "Empty filename"}), 400
-    # Secure and unique filename
     orig_name = secure_filename(file.filename)
     name, ext = os.path.splitext(orig_name)
     unique_name = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(WALLPAPER_DIR, unique_name)
     file.save(filepath)
-    # Return the URL path
     return jsonify({"status": "ok", "path": f"/wallpaper/{unique_name}"})
 
-# ---------- Export / Import ----------
 @app.route('/api/export', methods=['GET'])
 def export_backup():
     memory_file = io.BytesIO()
