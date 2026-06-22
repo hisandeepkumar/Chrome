@@ -101,7 +101,6 @@ body {
 }
 .app-card .name:empty { display: none; }
 
-/* Special cards (Edit & Settings) */
 .special-card .icon {
     background: rgba(255,255,255,0.1);
     backdrop-filter: blur(10px);
