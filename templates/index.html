@@ -20,6 +20,8 @@
             <button id="editBtn" class="action-btn">✏️</button>
             <button id="gridSettingsBtn" class="action-btn">⚙️</button>
         </div>
+        <!-- Dock -->
+        <div id="dockContainer" class="dock-container" style="display:none;"></div>
     </div>
 
     <!-- Edit Overlay -->
@@ -36,59 +38,158 @@
         </div>
     </div>
 
-    <!-- Grid Settings Modal -->
-    <div id="gridSettingsModal" class="modal" style="display:none;">
-        <div class="modal-content glass" style="max-width:450px;">
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal" style="display:none;">
+        <div class="modal-content glass" style="max-width:700px; max-height:90vh; overflow-y:auto;">
             <span class="close-btn" id="closeSettings">&times;</span>
-            <h2>⚙️ Grid Settings</h2>
-            <div class="settings-group">
-                <label>Portrait Columns</label>
-                <input type="number" id="portraitCols" min="1" max="6" value="3">
+            <h2 style="margin-bottom:15px;">⚙️ Settings</h2>
+            <!-- Tabs -->
+            <div class="settings-tabs">
+                <button class="tab-btn active" data-tab="grid">Grid</button>
+                <button class="tab-btn" data-tab="effects">Effects</button>
+                <button class="tab-btn" data-tab="wallpaper">Wallpaper</button>
+                <button class="tab-btn" data-tab="dock">Dock</button>
+                <button class="tab-btn" data-tab="labels">Labels</button>
+                <button class="tab-btn" data-tab="presets">Presets</button>
+                <button class="tab-btn" data-tab="backup">Backup</button>
             </div>
-            <div class="settings-group">
-                <label>Portrait Rows</label>
-                <input type="number" id="portraitRows" min="1" max="6" value="4">
+            <div class="tab-content" id="tabGrid">
+                <!-- Grid Settings (shared between portrait/landscape) -->
+                <div style="display:flex; flex-wrap:wrap; gap:20px;">
+                    <div style="flex:1; min-width:200px;">
+                        <h3>Portrait</h3>
+                        <div class="settings-group"><label>Columns</label><input type="number" id="portraitCols" min="1" max="8" value="3"></div>
+                        <div class="settings-group"><label>Rows</label><input type="number" id="portraitRows" min="1" max="8" value="4"></div>
+                        <div class="settings-group"><label>Icon Size (px)</label><input type="range" id="portraitIconSize" min="40" max="200" value="64"><span id="portraitIconSizeVal">64</span></div>
+                        <div class="settings-group"><label>Icon Shape</label>
+                            <select id="portraitIconShape">
+                                <option value="square">Square</option>
+                                <option value="rounded" selected>Rounded</option>
+                                <option value="circle">Circle</option>
+                                <option value="squircle">Squircle</option>
+                            </select>
+                        </div>
+                        <div class="settings-group"><label>Label Font Size</label><input type="number" id="portraitLabelFontSize" min="8" max="24" value="12"></div>
+                        <div class="settings-group"><label>Horizontal Gap</label><input type="number" id="portraitHGap" min="0" max="40" value="16"></div>
+                        <div class="settings-group"><label>Vertical Gap</label><input type="number" id="portraitVGap" min="0" max="40" value="16"></div>
+                        <div class="settings-group"><label>Edge Padding Top</label><input type="number" id="portraitPadTop" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Edge Padding Bottom</label><input type="number" id="portraitPadBottom" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Edge Padding Left</label><input type="number" id="portraitPadLeft" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Edge Padding Right</label><input type="number" id="portraitPadRight" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Grid Alignment</label>
+                            <select id="portraitGridAlignment">
+                                <option value="center">Center</option>
+                                <option value="left">Left</option>
+                                <option value="right">Right</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="flex:1; min-width:200px;">
+                        <h3>Landscape</h3>
+                        <div class="settings-group"><label>Columns</label><input type="number" id="landscapeCols" min="1" max="8" value="4"></div>
+                        <div class="settings-group"><label>Rows</label><input type="number" id="landscapeRows" min="1" max="8" value="3"></div>
+                        <div class="settings-group"><label>Icon Size (px)</label><input type="range" id="landscapeIconSize" min="40" max="200" value="64"><span id="landscapeIconSizeVal">64</span></div>
+                        <div class="settings-group"><label>Icon Shape</label>
+                            <select id="landscapeIconShape">
+                                <option value="square">Square</option>
+                                <option value="rounded" selected>Rounded</option>
+                                <option value="circle">Circle</option>
+                                <option value="squircle">Squircle</option>
+                            </select>
+                        </div>
+                        <div class="settings-group"><label>Label Font Size</label><input type="number" id="landscapeLabelFontSize" min="8" max="24" value="12"></div>
+                        <div class="settings-group"><label>Horizontal Gap</label><input type="number" id="landscapeHGap" min="0" max="40" value="16"></div>
+                        <div class="settings-group"><label>Vertical Gap</label><input type="number" id="landscapeVGap" min="0" max="40" value="16"></div>
+                        <div class="settings-group"><label>Edge Padding Top</label><input type="number" id="landscapePadTop" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Edge Padding Bottom</label><input type="number" id="landscapePadBottom" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Edge Padding Left</label><input type="number" id="landscapePadLeft" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Edge Padding Right</label><input type="number" id="landscapePadRight" min="0" max="100" value="20"></div>
+                        <div class="settings-group"><label>Grid Alignment</label>
+                            <select id="landscapeGridAlignment">
+                                <option value="center">Center</option>
+                                <option value="left">Left</option>
+                                <option value="right">Right</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="settings-group">
-                <label>Landscape Columns</label>
-                <input type="number" id="landscapeCols" min="1" max="8" value="4">
+            <div class="tab-content" id="tabEffects" style="display:none;">
+                <div class="settings-group"><label>Glow Color</label><input type="color" id="glowColor" value="#ffffff"></div>
+                <div class="settings-group"><label>Glow Brightness</label><input type="range" id="glowBrightness" min="0" max="100" value="50"><span id="glowBrightnessVal">50</span></div>
+                <div class="settings-group"><label>Glow Radius</label><input type="range" id="glowRadius" min="0" max="60" value="20"><span id="glowRadiusVal">20</span></div>
+                <div class="settings-group"><label>Shadow Strength</label><input type="range" id="shadowStrength" min="0" max="100" value="0"><span id="shadowStrengthVal">0</span></div>
+                <div class="settings-group"><label>Shadow Blur</label><input type="range" id="shadowBlur" min="0" max="40" value="0"><span id="shadowBlurVal">0</span></div>
+                <div class="settings-group"><label>Border Radius</label><input type="range" id="borderRadius" min="0" max="50" value="16"><span id="borderRadiusVal">16</span></div>
+                <div class="settings-group"><label>Hover Scale</label><input type="number" id="hoverScale" min="1" max="1.5" step="0.01" value="1.05"></div>
+                <div class="settings-group"><label>Tap Animation</label><input type="checkbox" id="tapAnimation" checked></div>
+                <!-- Live Preview -->
+                <div class="preview-card">
+                    <div id="previewApp" class="app-card">
+                        <span class="icon" style="font-size:2.5rem;">🚀</span>
+                        <span class="name">Preview</span>
+                    </div>
+                </div>
             </div>
-            <div class="settings-group">
-                <label>Landscape Rows</label>
-                <input type="number" id="landscapeRows" min="1" max="6" value="3">
+            <div class="tab-content" id="tabWallpaper" style="display:none;">
+                <div class="settings-group"><label>Type</label>
+                    <select id="wallpaperType">
+                        <option value="color">Color</option>
+                        <option value="image">Image</option>
+                        <option value="video">Video</option>
+                    </select>
+                </div>
+                <div class="settings-group" id="wallpaperColorGroup"><label>Color</label><input type="color" id="wallpaperColor" value="#000000"></div>
+                <div class="settings-group" id="wallpaperFileGroup" style="display:none;"><label>Upload Image/Video</label><input type="file" id="wallpaperFile" accept="image/*,video/*"></div>
+                <div class="settings-group"><label>Dim Level</label><input type="range" id="wallpaperDim" min="0" max="100" value="0"><span id="wallpaperDimVal">0</span></div>
+                <div class="settings-group"><label>Blur</label><input type="range" id="wallpaperBlur" min="0" max="20" step="0.5" value="0"><span id="wallpaperBlurVal">0</span></div>
+                <div class="settings-group"><label>Zoom</label><input type="range" id="wallpaperZoom" min="50" max="200" value="100"><span id="wallpaperZoomVal">100</span></div>
+                <div class="settings-group"><label>Brightness</label><input type="range" id="wallpaperBrightness" min="0" max="200" value="100"><span id="wallpaperBrightnessVal">100</span></div>
+                <div class="settings-group"><label>Opacity</label><input type="range" id="wallpaperOpacity" min="0" max="100" value="100"><span id="wallpaperOpacityVal">100</span></div>
             </div>
-            <div class="settings-group">
-                <label>Icon Size (px)</label>
-                <input type="range" id="iconSize" min="40" max="120" value="64">
-                <span id="iconSizeVal">64</span>
+            <div class="tab-content" id="tabDock" style="display:none;">
+                <div class="settings-group"><label>Enable Dock</label><input type="checkbox" id="dockEnabled"></div>
+                <div class="settings-group"><label>Select Dock Icons (drag to reorder later)</label>
+                    <div id="dockIconSelector" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;"></div>
+                </div>
+                <div class="settings-group"><label>Background Blur</label><input type="range" id="dockBlur" min="0" max="30" value="20"><span id="dockBlurVal">20</span></div>
+                <div class="settings-group"><label>Opacity</label><input type="range" id="dockOpacity" min="0" max="100" value="80"><span id="dockOpacityVal">80</span></div>
+                <div class="settings-group"><label>Icon Size</label><input type="range" id="dockIconSize" min="30" max="80" value="48"><span id="dockIconSizeVal">48</span></div>
+                <div class="settings-group"><label>Auto Hide</label><input type="checkbox" id="dockAutoHide"></div>
             </div>
-            <div class="settings-group">
-                <label>Glow Size</label>
-                <input type="range" id="glowSize" min="0" max="60" value="20">
-                <span id="glowSizeVal">20</span>
+            <div class="tab-content" id="tabLabels" style="display:none;">
+                <div class="settings-group"><label>Hide App Names</label><input type="checkbox" id="labelsHide"></div>
+                <div class="settings-group"><label>Show App Names</label><input type="checkbox" id="labelsShow" checked></div>
+                <div class="settings-group"><label>Label Color</label><input type="color" id="labelColor" value="#ffffff"></div>
+                <div class="settings-group"><label>Label Shadow</label><input type="checkbox" id="labelShadow"></div>
             </div>
-            <div class="settings-group">
-                <label>Background Blur</label>
-                <input type="range" id="bgBlur" min="0" max="20" value="0" step="0.5">
-                <span id="bgBlurVal">0</span>
+            <div class="tab-content" id="tabPresets" style="display:none;">
+                <h3>Built‑in Presets</h3>
+                <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:15px;">
+                    <button class="preset-btn" data-preset="Apple Clean">Apple Clean</button>
+                    <button class="preset-btn" data-preset="Samsung OneUI">Samsung OneUI</button>
+                    <button class="preset-btn" data-preset="Windows 11">Windows 11</button>
+                    <button class="preset-btn" data-preset="AMOLED Black">AMOLED Black</button>
+                    <button class="preset-btn" data-preset="RGB Gaming">RGB Gaming</button>
+                    <button class="preset-btn" data-preset="Minimal">Minimal</button>
+                    <button class="preset-btn" data-preset="Large Icons">Large Icons</button>
+                    <button class="preset-btn" data-preset="Compact Grid">Compact Grid</button>
+                </div>
+                <div class="settings-group"><label>Current Preset</label><span id="currentPresetLabel">default</span></div>
+                <button id="resetToDefaultBtn" class="glass-btn" style="margin-top:10px;">Reset to Default</button>
             </div>
-            <div class="settings-group">
-                <label>Background Type</label>
-                <select id="bgType">
-                    <option value="color">Color</option>
-                    <option value="image">Image</option>
-                    <option value="video">Video</option>
-                </select>
+            <div class="tab-content" id="tabBackup" style="display:none;">
+                <button id="exportBtn" class="glass-btn primary">⬇️ Download Setup (.wlbackup)</button>
+                <div style="margin-top:15px;">
+                    <label class="file-upload-label" style="display:inline-block; padding:12px 24px; border-radius:40px; background:rgba(255,255,255,0.1); cursor:pointer;">
+                        📂 Import Setup
+                        <input type="file" id="importFile" accept=".wlbackup" style="display:none;">
+                    </label>
+                </div>
+                <div id="backupMsg" style="margin-top:10px; color:#ff6b6b;"></div>
             </div>
-            <div class="settings-group" id="bgColorGroup">
-                <label>Background Color</label>
-                <input type="color" id="bgColor" value="#000000">
-            </div>
-            <div class="settings-group" id="bgFileGroup" style="display:none;">
-                <label>Upload Image/Video</label>
-                <input type="file" id="bgFile" accept="image/*,video/*">
-            </div>
-            <button id="saveSettingsBtn" class="glass-btn primary">Save Settings</button>
+
+            <button id="saveSettingsBtn" class="glass-btn primary" style="margin-top:20px; width:100%;">Save Settings</button>
             <p id="settingsMsg" style="color:#ff6b6b; margin-top:10px;"></p>
         </div>
     </div>
