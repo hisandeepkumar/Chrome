@@ -87,7 +87,7 @@ DEFAULT_SETTINGS_V2 = {
         "label_font_size": 12,
         "h_gap": 16,
         "v_gap": 16,
-        "padding": 100,   # 100px from edges
+        "padding": 100,
         "grid_alignment": "center"
     },
     "landscape": {
@@ -238,7 +238,6 @@ def load_config():
         for key in DEFAULT_SETTINGS_V2:
             if key not in data['settings']:
                 data['settings'][key] = DEFAULT_SETTINGS_V2[key]
-        # Ensure padding is set
         for ori in ['portrait', 'landscape']:
             if 'padding' not in data['settings'].get(ori, {}):
                 data['settings'][ori]['padding'] = 100
@@ -291,6 +290,7 @@ def get_settings():
 @app.route('/api/settings', methods=['POST'])
 def save_settings():
     new_settings = request.json
+    print("📥 Received settings POST:", json.dumps(new_settings, indent=2)[:500])  # debug
     if not isinstance(new_settings, dict):
         return jsonify({"status": "error", "msg": "Invalid settings format"}), 400
     # Ensure version
@@ -397,7 +397,7 @@ def upload_wallpaper():
     unique_name = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(WALLPAPER_DIR, unique_name)
     file.save(filepath)
-    # Return the URL path
+    print(f"🖼️ Wallpaper saved: {filepath}")
     return jsonify({"status": "ok", "path": f"/wallpaper/{unique_name}"})
 
 @app.route('/api/export', methods=['GET'])
