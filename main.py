@@ -5,7 +5,10 @@ import json
 import os
 import subprocess
 import uuid
-from flask import Flask, request, render_template, jsonify, send_from_directory
+import shutil
+import zipfile
+import io
+from flask import Flask, request, render_template, jsonify, send_from_directory, send_file
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
@@ -13,19 +16,23 @@ import qrcode
 from io import BytesIO
 from zeroconf import ServiceInfo, Zeroconf
 from PIL import Image, ImageDraw, ImageFont
+from werkzeug.utils import secure_filename
 
 # ---------- User Data Directory ----------
 APPDATA = os.path.expandvars('%APPDATA%')
 USER_DIR = os.path.join(APPDATA, 'WinLauncher')
 ICON_DIR = os.path.join(USER_DIR, 'icons')
+WALLPAPER_DIR = os.path.join(USER_DIR, 'wallpaper')
 CONFIG_FILE = os.path.join(USER_DIR, 'config.json')
 PWA_ICON_DIR = os.path.join(USER_DIR, 'pwa')
 os.makedirs(ICON_DIR, exist_ok=True)
+os.makedirs(WALLPAPER_DIR, exist_ok=True)
 os.makedirs(PWA_ICON_DIR, exist_ok=True)
 
 # ---------- Flask Setup ----------
 app = Flask(__name__, static_folder='static', template_folder='templates')
 PORT = 5000
+app.config['MAX_CONTENT_LENGTH'] = 512 * 1024 * 1024  # 512 MB for large videos
 
 # ---------- Generate PWA Icons ----------
 def generate_pwa_icons():
@@ -43,7 +50,7 @@ def generate_pwa_icons():
             img.save(path)
 generate_pwa_icons()
 
-# ---------- Default Apps (अब सारे Useful Shortcuts) ----------
+# ---------- Default Apps ----------
 DEFAULT_APPS = [
     # Web Apps
     {"id": "whatsapp", "name": "WhatsApp", "path": "https://web.whatsapp.com", "icon": "💬"},
@@ -52,27 +59,22 @@ DEFAULT_APPS = [
     {"id": "chatgpt", "name": "ChatGPT", "path": "https://chatgpt.com", "icon": "✨"},
     {"id": "gmail", "name": "Gmail", "path": "https://gmail.com", "icon": "📧"},
     {"id": "newtab", "name": "New Tab", "path": "about:blank", "icon": "➕"},
-    
     # System Settings
     {"id": "wifi", "name": "WiFi", "path": "ms-settings:network-wifi", "icon": "📶"},
     {"id": "bluetooth", "name": "Bluetooth", "path": "ms-settings:bluetooth", "icon": "📳"},
     {"id": "display", "name": "Display", "path": "ms-settings:display", "icon": "🖥️"},
     {"id": "sound", "name": "Sound", "path": "ms-settings:sound", "icon": "🔊"},
-    
     # Volume Control
     {"id": "volup", "name": "Volume +", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]175)", "icon": "🔊+"},
     {"id": "voldown", "name": "Volume -", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]174)", "icon": "🔊-"},
-    
     # Brightness Control
     {"id": "brightup", "name": "Brightness +", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,100)", "icon": "☀️+"},
     {"id": "brightdown", "name": "Brightness -", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,50)", "icon": "☀️-"},
-    
     # Utility
     {"id": "lockpc", "name": "Lock PC", "path": "rundll32.exe user32.dll,LockWorkStation", "icon": "🔒"},
     {"id": "taskmgr", "name": "Task Manager", "path": "taskmgr.exe", "icon": "⚙️"},
     {"id": "snipping", "name": "Snipping Tool", "path": "SnippingTool.exe", "icon": "✂️"},
     {"id": "control", "name": "Control Panel", "path": "control.exe", "icon": "📟"},
-    
     # Common Apps
     {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "📝"},
     {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "🧮"},
@@ -81,52 +83,180 @@ DEFAULT_APPS = [
     {"id": "closeall", "name": "Close Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"}
 ]
 
-DEFAULT_SETTINGS = {
-    "grid": {
-        "portrait_cols": 3,
-        "portrait_rows": 4,
-        "landscape_cols": 4,
-        "landscape_rows": 3,
+DEFAULT_SETTINGS_V2 = {
+    "version": "2.0",
+    "portrait": {
+        "cols": 3,
+        "rows": 4,
         "icon_size": 64,
-        "glow_size": 20,
+        "icon_shape": "rounded",
+        "label_font_size": 12,
+        "h_gap": 16,
+        "v_gap": 16,
+        "edge_padding": {"top": 20, "bottom": 20, "left": 20, "right": 20},
+        "grid_alignment": "center"
+    },
+    "landscape": {
+        "cols": 4,
+        "rows": 3,
+        "icon_size": 64,
+        "icon_shape": "rounded",
+        "label_font_size": 12,
+        "h_gap": 16,
+        "v_gap": 16,
+        "edge_padding": {"top": 20, "bottom": 20, "left": 20, "right": 20},
+        "grid_alignment": "center"
+    },
+    "effects": {
+        "glow_color": "#ffffff",
+        "glow_brightness": 50,
+        "glow_radius": 20,
+        "shadow_strength": 0,
+        "shadow_blur": 0,
+        "border_radius": 16,
+        "hover_scale": 1.05,
+        "tap_animation": True
+    },
+    "wallpaper": {
+        "type": "color",
+        "value": "#000000",
+        "dim": 0,
         "blur": 0,
-        "bg_type": "color",
-        "bg_value": "#000000"
+        "zoom": 100,
+        "brightness": 100,
+        "opacity": 100
+    },
+    "dock": {
+        "enabled": False,
+        "icons": [],
+        "background_blur": 20,
+        "opacity": 80,
+        "icon_size": 48,
+        "auto_hide": False
+    },
+    "labels": {
+        "hide": False,
+        "show": True,
+        "color": "#ffffff",
+        "shadow": False
+    },
+    "presets": {
+        "current": "default",
+        "list": {}
     }
 }
 
+# ---------- Migration from old settings ----------
+def migrate_settings(old_data):
+    """Convert old settings (v1) to new v2 format."""
+    old_settings = old_data.get('settings', {})
+    old_grid = old_settings.get('grid', {})
+    
+    # Build new structure
+    new_settings = {
+        "version": "2.0",
+        "portrait": {
+            "cols": old_grid.get('portrait_cols', 3),
+            "rows": old_grid.get('portrait_rows', 4),
+            "icon_size": old_grid.get('icon_size', 64),
+            "icon_shape": "rounded",
+            "label_font_size": 12,
+            "h_gap": 16,
+            "v_gap": 16,
+            "edge_padding": {"top": 20, "bottom": 20, "left": 20, "right": 20},
+            "grid_alignment": "center"
+        },
+        "landscape": {
+            "cols": old_grid.get('landscape_cols', 4),
+            "rows": old_grid.get('landscape_rows', 3),
+            "icon_size": old_grid.get('icon_size', 64),
+            "icon_shape": "rounded",
+            "label_font_size": 12,
+            "h_gap": 16,
+            "v_gap": 16,
+            "edge_padding": {"top": 20, "bottom": 20, "left": 20, "right": 20},
+            "grid_alignment": "center"
+        },
+        "effects": {
+            "glow_color": "#ffffff",
+            "glow_brightness": 50,
+            "glow_radius": old_grid.get('glow_size', 20),
+            "shadow_strength": 0,
+            "shadow_blur": 0,
+            "border_radius": 16,
+            "hover_scale": 1.05,
+            "tap_animation": True
+        },
+        "wallpaper": {
+            "type": old_grid.get('bg_type', 'color'),
+            "value": old_grid.get('bg_value', '#000000'),
+            "dim": 0,
+            "blur": old_grid.get('blur', 0),
+            "zoom": 100,
+            "brightness": 100,
+            "opacity": 100
+        },
+        "dock": {
+            "enabled": False,
+            "icons": [],
+            "background_blur": 20,
+            "opacity": 80,
+            "icon_size": 48,
+            "auto_hide": False
+        },
+        "labels": {
+            "hide": False,
+            "show": True,
+            "color": "#ffffff",
+            "shadow": False
+        },
+        "presets": {
+            "current": "default",
+            "list": {}
+        }
+    }
+    return new_settings
+
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        # नया config बनाएँ
+        # Create new config with v2 settings
+        data = {"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS_V2}
         with open(CONFIG_FILE, 'w') as f:
-            json.dump({"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}, f, indent=4)
-        return {"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}
-    
-    # अगर config पहले से है, तो उसे Load करें
+            json.dump(data, f, indent=4)
+        return data
+
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
-    
-    # सुनिश्चित करें कि settings मौजूद है और सही structure है
-    if 'settings' not in data:
-        data['settings'] = DEFAULT_SETTINGS
-    elif 'grid' not in data.get('settings', {}):
-        # अगर पुराना format है तो नए format में convert करें
-        data['settings'] = DEFAULT_SETTINGS
-    
-    # नए Default Apps को मर्ज करें (जो पहले से नहीं हैं)
-    existing_ids = {app['id'] for app in data.get('apps', [])}
-    for default_app in DEFAULT_APPS:
-        if default_app['id'] not in existing_ids:
-            data['apps'].append(default_app)
-    
-    # अगर apps बिल्कुल ही नहीं है तो Default सेट करें
-    if 'apps' not in data or not data['apps']:
-        data['apps'] = DEFAULT_APPS
-    
-    # Save back (ताकि नए apps सेव हो जाएँ)
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
-    
+
+    # Check version
+    settings = data.get('settings', {})
+    if 'version' not in settings or settings['version'] != '2.0':
+        # Migrate
+        new_settings = migrate_settings(data)
+        data['settings'] = new_settings
+        # Ensure apps exist
+        if 'apps' not in data or not data['apps']:
+            data['apps'] = DEFAULT_APPS
+        # Merge default apps that are missing
+        existing_ids = {app['id'] for app in data.get('apps', [])}
+        for default_app in DEFAULT_APPS:
+            if default_app['id'] not in existing_ids:
+                data['apps'].append(default_app)
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(data, f, indent=4)
+    else:
+        # Already v2: ensure all default apps exist
+        existing_ids = {app['id'] for app in data.get('apps', [])}
+        for default_app in DEFAULT_APPS:
+            if default_app['id'] not in existing_ids:
+                data['apps'].append(default_app)
+        # Ensure all settings keys exist
+        for key in DEFAULT_SETTINGS_V2:
+            if key not in data['settings']:
+                data['settings'][key] = DEFAULT_SETTINGS_V2[key]
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(data, f, indent=4)
+
     return data
 
 def save_config(data):
@@ -152,35 +282,40 @@ def serve_pwa_icon(filename):
 def serve_user_icon(filename):
     return send_from_directory(ICON_DIR, filename)
 
+@app.route('/wallpaper/<path:filename>')
+def serve_wallpaper(filename):
+    return send_from_directory(WALLPAPER_DIR, filename)
+
 @app.route('/api/apps', methods=['GET'])
 def get_apps():
     return jsonify(config_data['apps'])
 
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
-    # सुनिश्चित करें कि settings सही format में है
-    return jsonify(config_data.get('settings', DEFAULT_SETTINGS))
+    # Ensure all keys exist
+    settings = config_data.get('settings', {})
+    # If version missing or wrong, migrate (but should be already done)
+    if 'version' not in settings or settings['version'] != '2.0':
+        settings = migrate_settings(config_data)
+        config_data['settings'] = settings
+        save_config(config_data)
+    return jsonify(settings)
 
 @app.route('/api/settings', methods=['POST'])
 def save_settings():
     """
-    Settings को save करता है
-    Expected format: {"grid": {...}} से आएगा
+    Save full settings object.
+    Expects JSON with full settings structure.
     """
-    data = request.json
-    
-    # अगर सिर्फ grid object आया है, तो इसे settings.grid में wrap करें
-    if isinstance(data, dict):
-        if 'grid' in data:
-            # सही format: {"grid": {...}}
-            config_data['settings'] = data
-        else:
-            # गलत format: सीधे grid properties आ गई
-            # तो इसे grid के अंदर रखें
-            config_data['settings'] = {"grid": data}
-    
+    new_settings = request.json
+    # Validate basic structure
+    if not isinstance(new_settings, dict):
+        return jsonify({"status": "error", "msg": "Invalid settings format"}), 400
+    # Ensure version
+    new_settings['version'] = '2.0'
+    config_data['settings'] = new_settings
     save_config(config_data)
-    return jsonify({"status": "ok", "message": "Settings saved successfully"})
+    return jsonify({"status": "ok", "message": "Settings saved"})
 
 @app.route('/api/apps', methods=['POST'])
 def add_or_edit_app():
@@ -232,7 +367,7 @@ def reorder_apps():
     for app_id in new_order:
         if app_id in app_map:
             reordered.append(app_map[app_id])
-    # अगर कोई app छूट गया तो उसे अंत में जोड़ें
+    # Add any missing apps at the end
     for app in config_data['apps']:
         if app not in reordered:
             reordered.append(app)
@@ -253,8 +388,7 @@ def launch_app(app_id):
                 elif path.startswith('taskkill'):
                     subprocess.Popen(path, shell=True, creationflags=0x08000000)
                 elif path.startswith('powershell'):
-                    # Remove 'powershell -c ' part and pass rest
-                    cmd = path[11:].strip()  # Remove 'powershell -c '
+                    cmd = path[11:].strip()
                     subprocess.Popen(['powershell', '-Command', cmd], shell=True)
                 elif path.startswith('rundll32'):
                     subprocess.Popen(path, shell=True)
@@ -264,6 +398,102 @@ def launch_app(app_id):
             except Exception as e:
                 return jsonify({"status": "error", "msg": str(e)}), 500
     return jsonify({"status": "not_found"}), 404
+
+# ---------- Export / Import ----------
+@app.route('/api/export', methods=['GET'])
+def export_backup():
+    """
+    Generate a .wlbackup zip file containing:
+    - config.json
+    - icons/*.png
+    - wallpaper/* (all files)
+    """
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # Add config.json
+        zf.writestr('config.json', json.dumps(config_data, indent=4))
+        # Add icons
+        for fname in os.listdir(ICON_DIR):
+            full_path = os.path.join(ICON_DIR, fname)
+            if os.path.isfile(full_path):
+                zf.write(full_path, f'icons/{fname}')
+        # Add wallpaper files
+        for fname in os.listdir(WALLPAPER_DIR):
+            full_path = os.path.join(WALLPAPER_DIR, fname)
+            if os.path.isfile(full_path):
+                zf.write(full_path, f'wallpaper/{fname}')
+    memory_file.seek(0)
+    return send_file(
+        memory_file,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='WinLauncherBackup.wlbackup'
+    )
+
+@app.route('/api/import', methods=['POST'])
+def import_backup():
+    """
+    Accept uploaded .wlbackup zip file, extract and replace everything.
+    """
+    if 'backup' not in request.files:
+        return jsonify({"status": "error", "msg": "No file uploaded"}), 400
+    file = request.files['backup']
+    if not file.filename.endswith('.wlbackup'):
+        return jsonify({"status": "error", "msg": "Invalid file format (must be .wlbackup)"}), 400
+
+    try:
+        # Save uploaded zip to temp
+        temp_path = os.path.join(USER_DIR, 'temp_import.zip')
+        file.save(temp_path)
+        
+        # Extract to temporary directory
+        extract_dir = os.path.join(USER_DIR, 'temp_import')
+        if os.path.exists(extract_dir):
+            shutil.rmtree(extract_dir)
+        os.makedirs(extract_dir)
+        with zipfile.ZipFile(temp_path, 'r') as zf:
+            zf.extractall(extract_dir)
+        os.remove(temp_path)
+        
+        # Verify config.json exists
+        config_path = os.path.join(extract_dir, 'config.json')
+        if not os.path.exists(config_path):
+            shutil.rmtree(extract_dir)
+            return jsonify({"status": "error", "msg": "Backup corrupted: config.json missing"}), 400
+        
+        # Load config to validate
+        with open(config_path, 'r') as f:
+            imported_config = json.load(f)
+        if 'apps' not in imported_config or 'settings' not in imported_config:
+            shutil.rmtree(extract_dir)
+            return jsonify({"status": "error", "msg": "Backup corrupted: invalid config"}), 400
+        
+        # Replace icons
+        icons_src = os.path.join(extract_dir, 'icons')
+        if os.path.exists(icons_src):
+            # Remove existing icons
+            shutil.rmtree(ICON_DIR)
+            shutil.copytree(icons_src, ICON_DIR)
+        
+        # Replace wallpaper
+        wallpaper_src = os.path.join(extract_dir, 'wallpaper')
+        if os.path.exists(wallpaper_src):
+            shutil.rmtree(WALLPAPER_DIR)
+            shutil.copytree(wallpaper_src, WALLPAPER_DIR)
+        
+        # Replace config
+        shutil.copy(config_path, CONFIG_FILE)
+        
+        # Cleanup
+        shutil.rmtree(extract_dir)
+        
+        # Reload config
+        global config_data
+        config_data = load_config()
+        
+        return jsonify({"status": "ok", "message": "Backup imported successfully. Please refresh."})
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
 
 # ---------- mDNS ----------
 def register_mdns():
