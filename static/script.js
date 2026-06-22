@@ -38,6 +38,8 @@ async function fetchApps() {
         appsData = await res.json();
         renderPages(appsData);
         updateDockIcons();
+        // Also update dock icon selector in settings if open
+        populateDockSelector();
     } catch (e) { console.error(e); }
 }
 
@@ -162,6 +164,10 @@ function applyIconStyles() {
     const borderRadius = effects.border_radius || 16;
     const hoverScale = effects.hover_scale || 1.05;
     const tapAnim = effects.tap_animation !== false;
+
+    // Set RGB for glow
+    const rgb = hexToRgb(glowColor);
+    document.documentElement.style.setProperty('--glow-color-rgb', rgb);
 
     // Set CSS variables
     document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
@@ -308,7 +314,6 @@ function renderDockIcons(iconIds) {
 }
 
 function updateDockIcons() {
-    // Called when apps change - refresh dock
     const dock = settings.dock || {};
     if (dock.enabled) {
         renderDockIcons(dock.icons || []);
@@ -475,19 +480,7 @@ function populateSettingsUI() {
     setVal('dockIconSize', dock.icon_size);
     setVal('dockIconSizeVal', dock.icon_size);
     document.getElementById('dockAutoHide').checked = dock.auto_hide || false;
-    // Populate dock icon selector
-    const selector = document.getElementById('dockIconSelector');
-    selector.innerHTML = '';
-    appsData.forEach(app => {
-        const label = document.createElement('label');
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = app.id;
-        cb.checked = (dock.icons || []).includes(app.id);
-        label.appendChild(cb);
-        label.appendChild(document.createTextNode(app.name || app.id));
-        selector.appendChild(label);
-    });
+    populateDockSelector();
 
     // Labels
     document.getElementById('labelsHide').checked = labels.hide || false;
@@ -497,6 +490,24 @@ function populateSettingsUI() {
 
     // Current preset
     document.getElementById('currentPresetLabel').textContent = settings.presets?.current || 'default';
+}
+
+function populateDockSelector() {
+    const selector = document.getElementById('dockIconSelector');
+    if (!selector) return;
+    selector.innerHTML = '';
+    const dock = settings.dock || {};
+    const selectedIds = dock.icons || [];
+    appsData.forEach(app => {
+        const label = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = app.id;
+        cb.checked = selectedIds.includes(app.id);
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(app.name || app.id));
+        selector.appendChild(label);
+    });
 }
 
 function setVal(id, val) {
@@ -510,8 +521,7 @@ function setSelect(id, val) {
 }
 
 function updateSettingsUI() {
-    // Update UI to reflect current settings (called after apply)
-    // Not needed for now, but we can keep for consistency
+    // Not needed for now
 }
 
 // ---------- Save Settings ----------
@@ -698,7 +708,6 @@ function applyPreset(name) {
     const presetData = presets[name];
     if (!presetData) return;
 
-    // Merge with existing settings to preserve presets list
     const newSettings = {
         version: '2.0',
         portrait: presetData.portrait,
@@ -714,7 +723,6 @@ function applyPreset(name) {
     applySettings();
     renderPages(appsData);
     document.getElementById('currentPresetLabel').textContent = name;
-    // Save to server
     fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -723,7 +731,6 @@ function applyPreset(name) {
 }
 
 function resetToDefault() {
-    // Reload default settings (v2)
     const defaultSettings = {
         version: '2.0',
         portrait: { cols:3, rows:4, icon_size:64, icon_shape:'rounded', label_font_size:12, h_gap:16, v_gap:16, edge_padding:{top:20,bottom:20,left:20,right:20}, grid_alignment:'center' },
@@ -785,14 +792,10 @@ async function importBackup(event) {
 
 // ---------- Preview ----------
 function setupPreview() {
-    // Effects live preview
     document.querySelectorAll('#tabEffects input, #tabEffects select').forEach(el => {
         el.addEventListener('input', () => {
-            // Update preview card
             const card = document.getElementById('previewApp');
             const icon = card.querySelector('.icon');
-            const name = card.querySelector('.name');
-            // Apply current effects
             const effects = {
                 glow_color: document.getElementById('glowColor').value,
                 glow_brightness: parseInt(document.getElementById('glowBrightness').value) / 100,
@@ -803,11 +806,10 @@ function setupPreview() {
                 hover_scale: parseFloat(document.getElementById('hoverScale').value),
                 tap_animation: document.getElementById('tapAnimation').checked
             };
-            // Apply to preview
-            icon.style.filter = `drop-shadow(0 0 ${effects.glow_radius}px rgba(${hexToRgb(effects.glow_color)}, ${effects.glow_brightness}))`;
+            const rgb = hexToRgb(effects.glow_color);
+            icon.style.filter = `drop-shadow(0 0 ${effects.glow_radius}px rgba(${rgb}, ${effects.glow_brightness}))`;
             icon.style.borderRadius = effects.border_radius + 'px';
             card.style.transform = `scale(${effects.hover_scale})`;
-            // Shadow
             if (effects.shadow_strength > 0) {
                 card.style.boxShadow = `0 ${effects.shadow_strength*20}px ${effects.shadow_blur}px rgba(0,0,0,${effects.shadow_strength})`;
             } else {
@@ -817,12 +819,13 @@ function setupPreview() {
     });
 }
 
+// ---------- Utility: hexToRgb ----------
 function hexToRgb(hex) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result ? `${parseInt(result[1],16)},${parseInt(result[2],16)},${parseInt(result[3],16)}` : '255,255,255';
 }
 
-// ---------- Swipe, Edit, Launch, Fullscreen (unchanged) ----------
+// ---------- Swipe, Edit, Launch, Fullscreen ----------
 function setupSwipeDetection() {
     const container = document.getElementById('appContainer');
     let startX = 0, startY = 0, isSwiping = false;
@@ -903,7 +906,7 @@ function initFullscreen() {
     });
 }
 
-// ---------- Edit View (unchanged) ----------
+// ---------- Edit View ----------
 function initEditView() {
     const editBtn = document.getElementById('editBtn');
     const closeEdit = document.getElementById('closeEdit');
@@ -974,7 +977,6 @@ function renderEditList(apps) {
         actions.appendChild(delBtn);
         item.appendChild(actions);
 
-        // Drag events
         item.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/plain', app.id);
             item.classList.add('dragging');
@@ -1028,7 +1030,7 @@ async function deleteApp(id) {
     }
 }
 
-// ---------- Add/Edit Modal (unchanged) ----------
+// ---------- Add/Edit Modal ----------
 function initAddModal() {
     const closeModal = document.getElementById('closeModal');
     const saveAppBtn = document.getElementById('saveAppBtn');
