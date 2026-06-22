@@ -39,7 +39,7 @@ body {
     scroll-snap-align: start;
     display: grid;
     gap: 16px;
-    padding: 150px 20px; /* 150px top/bottom, 20px left/right – but we also want 150px from edges, so we use large top/bottom padding */
+    padding: 150px 20px; /* 150px from top/bottom, 20px left/right */
     justify-items: center;
     align-content: center;
     background: rgba(255, 255, 255, 0.05);
@@ -50,7 +50,7 @@ body {
     border: 1px solid rgba(255,255,255,0.1);
 }
 
-/* Adjust padding to keep icons away from edges */
+/* Adjust padding on smaller screens to maintain ~150px edge distance */
 @media (max-width: 600px) {
     .page {
         padding: 100px 15px;
@@ -80,10 +80,6 @@ body {
     -webkit-user-drag: none;
 }
 .app-card:hover { transform: scale(1.05); }
-.app-card.drag-over {
-    transform: scale(1.1);
-    filter: brightness(1.3);
-}
 
 .app-card .icon {
     display: flex;
