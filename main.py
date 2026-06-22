@@ -87,7 +87,7 @@ DEFAULT_SETTINGS_V2 = {
         "label_font_size": 12,
         "h_gap": 16,
         "v_gap": 16,
-        "padding": 20,   # single value for all sides
+        "padding": 100,   # 100px from edges
         "grid_alignment": "center"
     },
     "landscape": {
@@ -98,7 +98,7 @@ DEFAULT_SETTINGS_V2 = {
         "label_font_size": 12,
         "h_gap": 16,
         "v_gap": 16,
-        "padding": 20,
+        "padding": 100,
         "grid_alignment": "center"
     },
     "effects": {
@@ -153,7 +153,7 @@ def migrate_settings(old_data):
             "label_font_size": 12,
             "h_gap": 16,
             "v_gap": 16,
-            "padding": 20,
+            "padding": 100,
             "grid_alignment": "center"
         },
         "landscape": {
@@ -164,7 +164,7 @@ def migrate_settings(old_data):
             "label_font_size": 12,
             "h_gap": 16,
             "v_gap": 16,
-            "padding": 20,
+            "padding": 100,
             "grid_alignment": "center"
         },
         "effects": {
@@ -238,10 +238,10 @@ def load_config():
         for key in DEFAULT_SETTINGS_V2:
             if key not in data['settings']:
                 data['settings'][key] = DEFAULT_SETTINGS_V2[key]
-        # Ensure padding exists
+        # Ensure padding is set
         for ori in ['portrait', 'landscape']:
             if 'padding' not in data['settings'].get(ori, {}):
-                data['settings'][ori]['padding'] = 20
+                data['settings'][ori]['padding'] = 100
         with open(CONFIG_FILE, 'w') as f:
             json.dump(data, f, indent=4)
 
@@ -250,6 +250,7 @@ def load_config():
 def save_config(data):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
+    print("✅ Config saved to disk")
 
 config_data = load_config()
 
@@ -297,10 +298,10 @@ def save_settings():
     # Ensure padding exists
     for ori in ['portrait', 'landscape']:
         if 'padding' not in new_settings.get(ori, {}):
-            new_settings[ori]['padding'] = 20
+            new_settings[ori]['padding'] = 100
     config_data['settings'] = new_settings
     save_config(config_data)
-    print("✅ Settings saved to disk")
+    print("✅ Settings updated on server")
     return jsonify({"status": "ok", "message": "Settings saved"})
 
 @app.route('/api/apps', methods=['POST'])
@@ -396,6 +397,7 @@ def upload_wallpaper():
     unique_name = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(WALLPAPER_DIR, unique_name)
     file.save(filepath)
+    # Return the URL path
     return jsonify({"status": "ok", "path": f"/wallpaper/{unique_name}"})
 
 @app.route('/api/export', methods=['GET'])
