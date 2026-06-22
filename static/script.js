@@ -44,18 +44,21 @@ async function fetchApps() {
 
 async function fetchSettings() {
     try {
-        let cached = loadSettingsFromLocal();
-        if (cached) {
-            settings = cached;
-            applySettings();
-        }
+        // First try server
         const res = await fetch('/api/settings');
         const serverSettings = await res.json();
+        // Compare with local
+        let cached = loadSettingsFromLocal();
         if (JSON.stringify(serverSettings) !== JSON.stringify(cached)) {
             settings = serverSettings;
             saveSettingsToLocal(settings);
-            applySettings();
+        } else if (cached) {
+            settings = cached;
+        } else {
+            settings = serverSettings;
+            saveSettingsToLocal(settings);
         }
+        applySettings();
     } catch (e) {
         console.error('Error fetching settings:', e);
         let cached = loadSettingsFromLocal();
@@ -95,18 +98,17 @@ function renderPages(apps) {
     const cols = grid.cols || 3;
     const rows = grid.rows || 4;
     const itemsPerPage = cols * rows;
-    // Add two special items: Edit and Settings
+    // Add special items at the end
     const specialItems = [
         { id: '__edit__', name: 'Edit', icon: '✏️', isSpecial: true },
         { id: '__settings__', name: 'Settings', icon: '⚙️', isSpecial: true }
     ];
-    // We'll place these at the end of the list
     const allApps = [...apps, ...specialItems];
     const totalPages = Math.ceil(allApps.length / itemsPerPage) || 1;
 
     const gap = grid.h_gap || 16;
     const vGap = grid.v_gap || 16;
-    const padding = grid.padding || 20; // single value
+    const padding = grid.padding || 100;
     const alignment = grid.grid_alignment || 'center';
 
     for (let p = 0; p < totalPages; p++) {
@@ -116,7 +118,7 @@ function renderPages(apps) {
         page.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
         page.style.gridTemplateRows = `repeat(${rows}, auto)`;
         page.style.gap = `${vGap}px ${gap}px`;
-        page.style.padding = `${padding}px`; // all sides
+        page.style.padding = `${padding}px`;
         page.style.justifyContent = alignment === 'left' ? 'start' : alignment === 'right' ? 'end' : 'center';
         page.style.alignContent = 'center';
         const pageApps = allApps.slice(p * itemsPerPage, (p + 1) * itemsPerPage);
@@ -222,7 +224,6 @@ function applySettings() {
     applyWallpaper();
     applyIconStyles();
     applyDock();
-    // No need to update UI here, populateSettingsUI will be called when modal opens
 }
 
 // ---------- Wallpaper ----------
@@ -346,7 +347,6 @@ function initSettingsUI() {
     const closeBtn = document.getElementById('closeSettings');
     const saveBtn = document.getElementById('saveSettingsBtn');
 
-    // Open is now triggered by special card click
     closeBtn.addEventListener('click', () => modal.style.display = 'none');
     window.addEventListener('click', (e) => {
         if (e.target === modal) modal.style.display = 'none';
@@ -369,6 +369,7 @@ function initSettingsUI() {
         if (valSpan) {
             range.addEventListener('input', () => {
                 valSpan.textContent = range.value;
+                // Live preview
                 applySettings();
             });
         }
@@ -416,7 +417,7 @@ function populateSettingsUI() {
     setVal('portraitLabelFontSize', gridP.label_font_size);
     setVal('portraitHGap', gridP.h_gap);
     setVal('portraitVGap', gridP.v_gap);
-    setVal('portraitPadding', gridP.padding || 20);
+    setVal('portraitPadding', gridP.padding || 100);
     setSelect('portraitGridAlignment', gridP.grid_alignment || 'center');
 
     setVal('landscapeCols', gridL.cols);
@@ -427,7 +428,7 @@ function populateSettingsUI() {
     setVal('landscapeLabelFontSize', gridL.label_font_size);
     setVal('landscapeHGap', gridL.h_gap);
     setVal('landscapeVGap', gridL.v_gap);
-    setVal('landscapePadding', gridL.padding || 20);
+    setVal('landscapePadding', gridL.padding || 100);
     setSelect('landscapeGridAlignment', gridL.grid_alignment || 'center');
 
     setVal('glowColor', effects.glow_color);
@@ -598,6 +599,8 @@ async function saveSettings() {
         const data = await res.json();
         document.getElementById('settingsMsg').textContent = data.message || 'Saved!';
         setTimeout(() => document.getElementById('settingsMsg').textContent = '', 2000);
+        // Re-fetch to ensure server has latest
+        await fetchSettings();
     } catch (e) {
         document.getElementById('settingsMsg').textContent = '⚠️ Offline - Settings cached locally';
     }
@@ -612,73 +615,73 @@ function getGridFromUI(prefix) {
         label_font_size: parseInt(document.getElementById(prefix + 'LabelFontSize').value) || 12,
         h_gap: parseInt(document.getElementById(prefix + 'HGap').value) || 16,
         v_gap: parseInt(document.getElementById(prefix + 'VGap').value) || 16,
-        padding: parseInt(document.getElementById(prefix + 'Padding').value) || 20,
+        padding: parseInt(document.getElementById(prefix + 'Padding').value) || 100,
         grid_alignment: document.getElementById(prefix + 'GridAlignment').value || 'center'
     };
 }
 
-// ---------- Presets ----------
+// ---------- Presets (updated with padding 100) ----------
 function applyPreset(name) {
     const presets = {
         'Apple Clean': {
-            portrait: { cols:3, rows:4, icon_size:64, icon_shape:'squircle', label_font_size:14, h_gap:20, v_gap:20, padding:30, grid_alignment:'center' },
-            landscape: { cols:4, rows:3, icon_size:60, icon_shape:'squircle', label_font_size:14, h_gap:20, v_gap:20, padding:30, grid_alignment:'center' },
+            portrait: { cols:3, rows:4, icon_size:64, icon_shape:'squircle', label_font_size:14, h_gap:20, v_gap:20, padding:100, grid_alignment:'center' },
+            landscape: { cols:4, rows:3, icon_size:60, icon_shape:'squircle', label_font_size:14, h_gap:20, v_gap:20, padding:100, grid_alignment:'center' },
             effects: { glow_color:'#ffffff', glow_brightness:40, glow_radius:20, shadow_strength:10, shadow_blur:10, border_radius:20, hover_scale:1.05, tap_animation:true },
             wallpaper: { type:'color', value:'#1a1a1a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
             dock: { enabled:true, icons:['whatsapp','youtube','gmail','chatgpt','deepseek'], background_blur:30, opacity:85, icon_size:50, auto_hide:false },
             labels: { hide:false, show:true, color:'#ffffff', shadow:true }
         },
         'Samsung OneUI': {
-            portrait: { cols:4, rows:5, icon_size:60, icon_shape:'rounded', label_font_size:11, h_gap:10, v_gap:10, padding:10, grid_alignment:'center' },
-            landscape: { cols:5, rows:4, icon_size:55, icon_shape:'rounded', label_font_size:11, h_gap:10, v_gap:10, padding:10, grid_alignment:'center' },
+            portrait: { cols:4, rows:5, icon_size:60, icon_shape:'rounded', label_font_size:11, h_gap:10, v_gap:10, padding:100, grid_alignment:'center' },
+            landscape: { cols:5, rows:4, icon_size:55, icon_shape:'rounded', label_font_size:11, h_gap:10, v_gap:10, padding:100, grid_alignment:'center' },
             effects: { glow_color:'#00aaff', glow_brightness:30, glow_radius:15, shadow_strength:20, shadow_blur:15, border_radius:12, hover_scale:1.05, tap_animation:true },
             wallpaper: { type:'color', value:'#0a0a0a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
             dock: { enabled:true, icons:['whatsapp','youtube','gmail','chatgpt','deepseek'], background_blur:20, opacity:90, icon_size:45, auto_hide:false },
             labels: { hide:false, show:true, color:'#cccccc', shadow:false }
         },
         'Windows 11': {
-            portrait: { cols:3, rows:3, icon_size:80, icon_shape:'square', label_font_size:12, h_gap:20, v_gap:20, padding:40, grid_alignment:'center' },
-            landscape: { cols:4, rows:2, icon_size:70, icon_shape:'square', label_font_size:12, h_gap:20, v_gap:20, padding:40, grid_alignment:'center' },
+            portrait: { cols:3, rows:3, icon_size:80, icon_shape:'square', label_font_size:12, h_gap:20, v_gap:20, padding:100, grid_alignment:'center' },
+            landscape: { cols:4, rows:2, icon_size:70, icon_shape:'square', label_font_size:12, h_gap:20, v_gap:20, padding:100, grid_alignment:'center' },
             effects: { glow_color:'#0078d4', glow_brightness:20, glow_radius:10, shadow_strength:30, shadow_blur:20, border_radius:0, hover_scale:1.02, tap_animation:true },
             wallpaper: { type:'color', value:'#1a1a2e', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
             dock: { enabled:true, icons:['explorer','notepad','calc','cmd','control'], background_blur:10, opacity:95, icon_size:45, auto_hide:false },
             labels: { hide:false, show:true, color:'#ffffff', shadow:false }
         },
         'AMOLED Black': {
-            portrait: { cols:4, rows:5, icon_size:56, icon_shape:'circle', label_font_size:11, h_gap:8, v_gap:8, padding:10, grid_alignment:'center' },
-            landscape: { cols:5, rows:4, icon_size:52, icon_shape:'circle', label_font_size:11, h_gap:8, v_gap:8, padding:10, grid_alignment:'center' },
+            portrait: { cols:4, rows:5, icon_size:56, icon_shape:'circle', label_font_size:11, h_gap:8, v_gap:8, padding:100, grid_alignment:'center' },
+            landscape: { cols:5, rows:4, icon_size:52, icon_shape:'circle', label_font_size:11, h_gap:8, v_gap:8, padding:100, grid_alignment:'center' },
             effects: { glow_color:'#00ffcc', glow_brightness:60, glow_radius:25, shadow_strength:0, shadow_blur:0, border_radius:50, hover_scale:1.1, tap_animation:true },
             wallpaper: { type:'color', value:'#000000', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
             dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
             labels: { hide:false, show:true, color:'#00ffcc', shadow:true }
         },
         'RGB Gaming': {
-            portrait: { cols:3, rows:4, icon_size:72, icon_shape:'rounded', label_font_size:14, h_gap:16, v_gap:16, padding:20, grid_alignment:'center' },
-            landscape: { cols:4, rows:3, icon_size:68, icon_shape:'rounded', label_font_size:14, h_gap:16, v_gap:16, padding:20, grid_alignment:'center' },
+            portrait: { cols:3, rows:4, icon_size:72, icon_shape:'rounded', label_font_size:14, h_gap:16, v_gap:16, padding:100, grid_alignment:'center' },
+            landscape: { cols:4, rows:3, icon_size:68, icon_shape:'rounded', label_font_size:14, h_gap:16, v_gap:16, padding:100, grid_alignment:'center' },
             effects: { glow_color:'#ff00ff', glow_brightness:80, glow_radius:30, shadow_strength:20, shadow_blur:20, border_radius:16, hover_scale:1.15, tap_animation:true },
             wallpaper: { type:'color', value:'#0a0a0a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
             dock: { enabled:true, icons:['whatsapp','youtube','chatgpt','deepseek','gmail'], background_blur:5, opacity:70, icon_size:55, auto_hide:true },
             labels: { hide:false, show:true, color:'#ff00ff', shadow:true }
         },
         'Minimal': {
-            portrait: { cols:3, rows:3, icon_size:48, icon_shape:'square', label_font_size:10, h_gap:20, v_gap:20, padding:60, grid_alignment:'center' },
-            landscape: { cols:4, rows:2, icon_size:44, icon_shape:'square', label_font_size:10, h_gap:20, v_gap:20, padding:60, grid_alignment:'center' },
+            portrait: { cols:3, rows:3, icon_size:48, icon_shape:'square', label_font_size:10, h_gap:20, v_gap:20, padding:100, grid_alignment:'center' },
+            landscape: { cols:4, rows:2, icon_size:44, icon_shape:'square', label_font_size:10, h_gap:20, v_gap:20, padding:100, grid_alignment:'center' },
             effects: { glow_color:'#ffffff', glow_brightness:10, glow_radius:5, shadow_strength:0, shadow_blur:0, border_radius:0, hover_scale:1.02, tap_animation:false },
             wallpaper: { type:'color', value:'#1a1a1a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
             dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
             labels: { hide:true, show:false, color:'#ffffff', shadow:false }
         },
         'Large Icons': {
-            portrait: { cols:2, rows:3, icon_size:120, icon_shape:'rounded', label_font_size:16, h_gap:30, v_gap:30, padding:20, grid_alignment:'center' },
-            landscape: { cols:3, rows:2, icon_size:110, icon_shape:'rounded', label_font_size:16, h_gap:30, v_gap:30, padding:20, grid_alignment:'center' },
+            portrait: { cols:2, rows:3, icon_size:120, icon_shape:'rounded', label_font_size:16, h_gap:30, v_gap:30, padding:100, grid_alignment:'center' },
+            landscape: { cols:3, rows:2, icon_size:110, icon_shape:'rounded', label_font_size:16, h_gap:30, v_gap:30, padding:100, grid_alignment:'center' },
             effects: { glow_color:'#ffffff', glow_brightness:60, glow_radius:30, shadow_strength:30, shadow_blur:20, border_radius:24, hover_scale:1.05, tap_animation:true },
             wallpaper: { type:'color', value:'#0a0a0a', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
             dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
             labels: { hide:false, show:true, color:'#ffffff', shadow:true }
         },
         'Compact Grid': {
-            portrait: { cols:5, rows:6, icon_size:44, icon_shape:'square', label_font_size:9, h_gap:4, v_gap:4, padding:5, grid_alignment:'center' },
-            landscape: { cols:6, rows:5, icon_size:40, icon_shape:'square', label_font_size:9, h_gap:4, v_gap:4, padding:5, grid_alignment:'center' },
+            portrait: { cols:5, rows:6, icon_size:44, icon_shape:'square', label_font_size:9, h_gap:4, v_gap:4, padding:100, grid_alignment:'center' },
+            landscape: { cols:6, rows:5, icon_size:40, icon_shape:'square', label_font_size:9, h_gap:4, v_gap:4, padding:100, grid_alignment:'center' },
             effects: { glow_color:'#ffffff', glow_brightness:0, glow_radius:0, shadow_strength:0, shadow_blur:0, border_radius:0, hover_scale:1.0, tap_animation:false },
             wallpaper: { type:'color', value:'#000000', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
             dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
@@ -708,14 +711,14 @@ function applyPreset(name) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
-    }).catch(console.error);
+    }).then(() => fetchSettings()).catch(console.error);
 }
 
 function resetToDefault() {
     const defaultSettings = {
         version: '2.0',
-        portrait: { cols:3, rows:4, icon_size:64, icon_shape:'rounded', label_font_size:12, h_gap:16, v_gap:16, padding:20, grid_alignment:'center' },
-        landscape: { cols:4, rows:3, icon_size:64, icon_shape:'rounded', label_font_size:12, h_gap:16, v_gap:16, padding:20, grid_alignment:'center' },
+        portrait: { cols:3, rows:4, icon_size:64, icon_shape:'rounded', label_font_size:12, h_gap:16, v_gap:16, padding:100, grid_alignment:'center' },
+        landscape: { cols:4, rows:3, icon_size:64, icon_shape:'rounded', label_font_size:12, h_gap:16, v_gap:16, padding:100, grid_alignment:'center' },
         effects: { glow_color:'#ffffff', glow_brightness:50, glow_radius:20, shadow_strength:0, shadow_blur:0, border_radius:16, hover_scale:1.05, tap_animation:true },
         wallpaper: { type:'color', value:'#000000', dim:0, blur:0, zoom:100, brightness:100, opacity:100 },
         dock: { enabled:false, icons:[], background_blur:20, opacity:80, icon_size:48, auto_hide:false },
@@ -731,10 +734,10 @@ function resetToDefault() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(defaultSettings)
-    }).catch(console.error);
+    }).then(() => fetchSettings()).catch(console.error);
 }
 
-// ---------- Export/Import ----------
+// ---------- Export/Import (unchanged) ----------
 async function exportBackup() {
     try {
         const res = await fetch('/api/export');
@@ -771,7 +774,7 @@ async function importBackup(event) {
     }
 }
 
-// ---------- Preview ----------
+// ---------- Preview (unchanged) ----------
 function setupPreview() {
     document.querySelectorAll('#tabEffects input, #tabEffects select').forEach(el => {
         el.addEventListener('input', () => {
@@ -805,7 +808,7 @@ function hexToRgb(hex) {
     return result ? `${parseInt(result[1],16)},${parseInt(result[2],16)},${parseInt(result[3],16)}` : '255,255,255';
 }
 
-// ---------- Swipe, Edit, Launch, Fullscreen ----------
+// ---------- Swipe, Edit, Launch, Fullscreen (unchanged) ----------
 function setupSwipeDetection() {
     const container = document.getElementById('appContainer');
     let startX = 0, startY = 0, isSwiping = false;
@@ -871,7 +874,7 @@ function updateIndicators(total) {
 }
 
 async function launchApp(id) {
-    if (id === '__edit__' || id === '__settings__') return; // handled by click
+    if (id === '__edit__' || id === '__settings__') return;
     try {
         await fetch(`/api/launch/${id}`);
     } catch (e) {}
@@ -887,7 +890,7 @@ function initFullscreen() {
     });
 }
 
-// ---------- Edit View ----------
+// ---------- Edit View (unchanged) ----------
 function initEditView() {
     const closeEdit = document.getElementById('closeEdit');
     const addMoreBtn = document.getElementById('addMoreBtn');
@@ -1009,7 +1012,7 @@ async function deleteApp(id) {
     }
 }
 
-// ---------- Add/Edit Modal ----------
+// ---------- Add/Edit Modal (unchanged) ----------
 function initAddModal() {
     const closeModal = document.getElementById('closeModal');
     const saveAppBtn = document.getElementById('saveAppBtn');
