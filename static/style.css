@@ -54,6 +54,7 @@ body {
     border: none !important;
     box-shadow: none !important;
     gap: 4px;
+    width: 100%;
 }
 .app-card:hover { transform: scale(var(--hover-scale, 1.05)); }
 .app-card:active { transform: scale(0.95); transition-duration: var(--tap-animation, 0.15s); }
@@ -100,6 +101,19 @@ body {
 }
 .app-card .name:empty { display: none; }
 
+/* Special cards (Edit & Settings) */
+.special-card .icon {
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 50%;
+    font-size: 2rem;
+}
+.special-card .name {
+    color: #ccc;
+    font-weight: 500;
+}
+
 .page-indicators {
     position: absolute;
     bottom: 80px;
@@ -118,32 +132,6 @@ body {
     transition: 0.3s;
 }
 .page-indicators .dot.active { background: white; width: 20px; border-radius: 4px; }
-
-.action-buttons {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 16px;
-    z-index: 10;
-}
-.action-btn {
-    background: rgba(255,255,255,0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 40px;
-    color: white;
-    padding: 10px 18px;
-    font-size: 1.2rem;
-    cursor: pointer;
-    transition: 0.2s;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
-.action-btn:hover {
-    background: rgba(255,255,255,0.2);
-    transform: scale(1.05);
-}
 
 .fullscreen-btn {
     position: fixed;
@@ -453,6 +441,5 @@ body {
 
 /* Responsive */
 @media (max-width: 500px) {
-    .action-btn { padding:8px 14px; font-size:1rem; }
     .fullscreen-btn { top:10px; right:10px; font-size:1rem; padding:4px 10px; }
 }
