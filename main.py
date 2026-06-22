@@ -87,10 +87,8 @@ DEFAULT_APPS = [
 
 DEFAULT_SETTINGS = {
     "grid": {
-        "portrait_cols": 3,
-        "portrait_rows": 4,
-        "landscape_cols": 4,
-        "landscape_rows": 3,
+        "cols": 3,
+        "rows": 4,
         "icon_size": 64,
         "glow_size": 20,
         "blur": 0,
@@ -231,7 +229,6 @@ def launch_app(app_id):
     for app in config_data['apps']:
         if app['id'] == app_id:
             path = app['path']
-            # System actions are handled on the client, return special status
             if path.startswith('system:'):
                 return jsonify({"status": "system", "action": path.split(':', 1)[1]})
             try:
