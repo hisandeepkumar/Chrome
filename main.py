@@ -85,10 +85,11 @@ DEFAULT_APPS = [
     {"id": "grid_settings", "name": "Grid Settings", "path": "system:settings", "icon": "⚙️", "is_system": True}
 ]
 
+# ... (same as before, only DEFAULT_SETTINGS updated)
 DEFAULT_SETTINGS = {
     "grid": {
-        "cols": 3,
-        "rows": 4,
+        "cols": 2,
+        "rows": 6,
         "icon_size": 64,
         "glow_size": 20,
         "blur": 0,
@@ -96,6 +97,7 @@ DEFAULT_SETTINGS = {
         "bg_value": "#000000"
     }
 }
+# rest of main.py unchanged
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
