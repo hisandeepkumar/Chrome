@@ -294,7 +294,6 @@ def get_apps():
 def get_settings():
     # Ensure all keys exist
     settings = config_data.get('settings', {})
-    # If version missing or wrong, migrate (but should be already done)
     if 'version' not in settings or settings['version'] != '2.0':
         settings = migrate_settings(config_data)
         config_data['settings'] = settings
@@ -303,15 +302,9 @@ def get_settings():
 
 @app.route('/api/settings', methods=['POST'])
 def save_settings():
-    """
-    Save full settings object.
-    Expects JSON with full settings structure.
-    """
     new_settings = request.json
-    # Validate basic structure
     if not isinstance(new_settings, dict):
         return jsonify({"status": "error", "msg": "Invalid settings format"}), 400
-    # Ensure version
     new_settings['version'] = '2.0'
     config_data['settings'] = new_settings
     save_config(config_data)
@@ -367,7 +360,6 @@ def reorder_apps():
     for app_id in new_order:
         if app_id in app_map:
             reordered.append(app_map[app_id])
-    # Add any missing apps at the end
     for app in config_data['apps']:
         if app not in reordered:
             reordered.append(app)
@@ -399,25 +391,33 @@ def launch_app(app_id):
                 return jsonify({"status": "error", "msg": str(e)}), 500
     return jsonify({"status": "not_found"}), 404
 
+# ---------- Wallpaper Upload Endpoint ----------
+@app.route('/api/upload_wallpaper', methods=['POST'])
+def upload_wallpaper():
+    if 'wallpaper' not in request.files:
+        return jsonify({"status": "error", "msg": "No file uploaded"}), 400
+    file = request.files['wallpaper']
+    if file.filename == '':
+        return jsonify({"status": "error", "msg": "Empty filename"}), 400
+    # Secure and unique filename
+    orig_name = secure_filename(file.filename)
+    name, ext = os.path.splitext(orig_name)
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join(WALLPAPER_DIR, unique_name)
+    file.save(filepath)
+    # Return the URL path
+    return jsonify({"status": "ok", "path": f"/wallpaper/{unique_name}"})
+
 # ---------- Export / Import ----------
 @app.route('/api/export', methods=['GET'])
 def export_backup():
-    """
-    Generate a .wlbackup zip file containing:
-    - config.json
-    - icons/*.png
-    - wallpaper/* (all files)
-    """
     memory_file = io.BytesIO()
     with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-        # Add config.json
         zf.writestr('config.json', json.dumps(config_data, indent=4))
-        # Add icons
         for fname in os.listdir(ICON_DIR):
             full_path = os.path.join(ICON_DIR, fname)
             if os.path.isfile(full_path):
                 zf.write(full_path, f'icons/{fname}')
-        # Add wallpaper files
         for fname in os.listdir(WALLPAPER_DIR):
             full_path = os.path.join(WALLPAPER_DIR, fname)
             if os.path.isfile(full_path):
@@ -432,9 +432,6 @@ def export_backup():
 
 @app.route('/api/import', methods=['POST'])
 def import_backup():
-    """
-    Accept uploaded .wlbackup zip file, extract and replace everything.
-    """
     if 'backup' not in request.files:
         return jsonify({"status": "error", "msg": "No file uploaded"}), 400
     file = request.files['backup']
@@ -442,11 +439,8 @@ def import_backup():
         return jsonify({"status": "error", "msg": "Invalid file format (must be .wlbackup)"}), 400
 
     try:
-        # Save uploaded zip to temp
         temp_path = os.path.join(USER_DIR, 'temp_import.zip')
         file.save(temp_path)
-        
-        # Extract to temporary directory
         extract_dir = os.path.join(USER_DIR, 'temp_import')
         if os.path.exists(extract_dir):
             shutil.rmtree(extract_dir)
@@ -454,43 +448,34 @@ def import_backup():
         with zipfile.ZipFile(temp_path, 'r') as zf:
             zf.extractall(extract_dir)
         os.remove(temp_path)
-        
-        # Verify config.json exists
+
         config_path = os.path.join(extract_dir, 'config.json')
         if not os.path.exists(config_path):
             shutil.rmtree(extract_dir)
             return jsonify({"status": "error", "msg": "Backup corrupted: config.json missing"}), 400
-        
-        # Load config to validate
+
         with open(config_path, 'r') as f:
             imported_config = json.load(f)
         if 'apps' not in imported_config or 'settings' not in imported_config:
             shutil.rmtree(extract_dir)
             return jsonify({"status": "error", "msg": "Backup corrupted: invalid config"}), 400
-        
-        # Replace icons
+
         icons_src = os.path.join(extract_dir, 'icons')
         if os.path.exists(icons_src):
-            # Remove existing icons
             shutil.rmtree(ICON_DIR)
             shutil.copytree(icons_src, ICON_DIR)
-        
-        # Replace wallpaper
+
         wallpaper_src = os.path.join(extract_dir, 'wallpaper')
         if os.path.exists(wallpaper_src):
             shutil.rmtree(WALLPAPER_DIR)
             shutil.copytree(wallpaper_src, WALLPAPER_DIR)
-        
-        # Replace config
+
         shutil.copy(config_path, CONFIG_FILE)
-        
-        # Cleanup
         shutil.rmtree(extract_dir)
-        
-        # Reload config
+
         global config_data
         config_data = load_config()
-        
+
         return jsonify({"status": "ok", "message": "Backup imported successfully. Please refresh."})
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)}), 500
