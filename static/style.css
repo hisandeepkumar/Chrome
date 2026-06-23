@@ -33,20 +33,26 @@ body {
 }
 .app-container::-webkit-scrollbar { display: none; }
 
-/* Page – flex column to center grid with pill at top */
+/* Page – flex column, centered */
 .page {
     flex: 0 0 100%;
     height: 100%;
     scroll-snap-align: start;
     display: flex;
     flex-direction: column;
+    justify-content: center;  /* default: center the grid */
     align-items: center;
-    justify-content: center; /* centers everything vertically */
     padding: 20px 20px 20px 20px;
     position: relative;
 }
 
-/* Page name pill – fixed at top, but we want it above the grid */
+/* When pill is present, we need top space for pill, but we still center the grid in remaining space */
+.page.has-pill {
+    justify-content: flex-start;  /* will position grid below pill */
+    padding-top: 70px;  /* enough space for pill */
+}
+
+/* Page name pill – only shown when custom name */
 .page-name-pill {
     position: absolute;
     top: 20px;
@@ -64,26 +70,27 @@ body {
     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
     box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
     letter-spacing: 0.5px;
-    z-index: 10;
+    z-index: 5;  /* same layer as grid */
     max-width: 80%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    pointer-events: none;  /* so clicks pass through to apps */
 }
 
-/* Grid container – centered and takes remaining space */
+/* Grid container – takes full width and remaining height */
 .page-grid {
     display: grid;
     gap: 16px;
     width: 100%;
-    max-width: 600px; /* optional, to avoid too wide spacing */
+    max-width: 600px;
     height: 100%;
     justify-items: center;
     align-content: center;
-    padding: 20px 0; /* give some space above/below grid */
+    padding: 10px 0;
 }
 
-/* 3D Glass Button for each app – uniform border */
+/* 3D Glass Button – name inside, uniform border */
 .app-card.glass-button {
     display: flex;
     flex-direction: column;
