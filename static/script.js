@@ -167,32 +167,46 @@ function updateIndicators(total) {
     }
 }
 
+// ---------- Apply Settings ----------
 function applySettings() {
     const g = settings.grid || {};
-    const gridFactor = (g.grid_size || 100) / 100;
-    const baseIconSize = 64;
-    const baseGap = 16;
-    const iconSize = Math.round(baseIconSize * gridFactor);
-    const gapSize = Math.round(baseGap * gridFactor);
+    const bgContainer = document.getElementById('bgContainer');
+    const videoEl = document.getElementById('bgVideo');
     
+    const iconSize = g.icon_size || 64;
     document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
+    
+    const gapSize = g.grid_size || 16;
     document.documentElement.style.setProperty('--gap-size', gapSize + 'px');
     
-    if (g.bg_type === 'color') {
-        document.body.style.background = g.bg_value || '#000000';
-        document.body.style.backgroundImage = '';
-        document.body.style.backgroundSize = '';
-        const vid = document.getElementById('bgVideo');
-        if (vid) vid.remove();
-    } else if (g.bg_type === 'image') {
-        if (g.bg_value) {
-            document.body.style.backgroundImage = `url(${g.bg_value})`;
-            document.body.style.backgroundSize = 'cover';
-            document.body.style.backgroundPosition = 'center';
-        }
-        const vid = document.getElementById('bgVideo');
-        if (vid) vid.remove();
-    } else if (g.bg_type === 'video') {
+    const blur = g.blur || 0;
+    const bgType = g.bg_type || 'color';
+    const bgValue = g.bg_value || '#000000';
+    
+    if (videoEl) videoEl.remove();
+    bgContainer.style.display = 'none';
+    bgContainer.style.backgroundImage = 'none';
+    bgContainer.style.filter = 'none';
+    bgContainer.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+    document.body.style.backgroundColor = 'transparent';
+    
+    if (bgType === 'color') {
+        document.body.style.background = bgValue;
+        document.body.style.backgroundColor = bgValue;
+    } else if (bgType === 'image') {
+        bgContainer.style.display = 'block';
+        bgContainer.style.position = 'fixed';
+        bgContainer.style.top = '0';
+        bgContainer.style.left = '0';
+        bgContainer.style.width = '100%';
+        bgContainer.style.height = '100%';
+        bgContainer.style.zIndex = '-1';
+        bgContainer.style.backgroundImage = `url(${bgValue})`;
+        bgContainer.style.backgroundSize = 'cover';
+        bgContainer.style.backgroundPosition = 'center';
+        bgContainer.style.filter = `blur(${blur}px)`;
+    } else if (bgType === 'video') {
         let video = document.getElementById('bgVideo');
         if (!video) {
             video = document.createElement('video');
@@ -209,13 +223,12 @@ function applySettings() {
             video.style.zIndex = '-1';
             document.body.prepend(video);
         }
-        if (g.bg_value) {
-            video.src = g.bg_value;
+        if (bgValue) {
+            video.src = bgValue;
             video.play().catch(() => {});
         }
+        video.style.filter = `blur(${blur}px)`;
     }
-    const blur = g.blur || 0;
-    document.body.style.backdropFilter = `blur(${blur}px)`;
 }
 
 // ---------- Swipe ----------
@@ -316,7 +329,7 @@ function toggleFullscreen() {
     }
 }
 
-// ---------- Grid Settings (grid size instead of glow) ----------
+// ---------- Grid Settings ----------
 function initGridSettings() {
     const modal = document.getElementById('gridSettingsModal');
     const close = document.getElementById('closeSettings');
@@ -327,8 +340,10 @@ function initGridSettings() {
 
     window.openGridSettings = function() {
         const g = settings.grid || {};
-        document.getElementById('gridSize').value = g.grid_size || 100;
-        document.getElementById('gridSizeVal').textContent = (g.grid_size || 100) + '%';
+        document.getElementById('iconSize').value = g.icon_size || 64;
+        document.getElementById('iconSizeVal').textContent = g.icon_size || 64;
+        document.getElementById('gridSize').value = g.grid_size || 16;
+        document.getElementById('gridSizeVal').textContent = g.grid_size || 16;
         document.getElementById('bgBlur').value = g.blur || 0;
         document.getElementById('bgBlurVal').textContent = g.blur || 0;
         document.getElementById('bgType').value = g.bg_type || 'color';
@@ -349,8 +364,11 @@ function initGridSettings() {
         if (e.target === modal) modal.style.display = 'none';
     });
 
+    document.getElementById('iconSize').addEventListener('input', function() {
+        document.getElementById('iconSizeVal').textContent = this.value;
+    });
     document.getElementById('gridSize').addEventListener('input', function() {
-        document.getElementById('gridSizeVal').textContent = this.value + '%';
+        document.getElementById('gridSizeVal').textContent = this.value;
     });
     document.getElementById('bgBlur').addEventListener('input', function() {
         document.getElementById('bgBlurVal').textContent = this.value;
@@ -367,7 +385,8 @@ function initGridSettings() {
     });
 
     save.addEventListener('click', async () => {
-        const gridSize = parseInt(document.getElementById('gridSize').value) || 100;
+        const iconSize = parseInt(document.getElementById('iconSize').value) || 64;
+        const gridSize = parseInt(document.getElementById('gridSize').value) || 16;
         const blur = parseFloat(document.getElementById('bgBlur').value) || 0;
         const bgType = document.getElementById('bgType').value;
         let bgValue = '';
@@ -376,7 +395,7 @@ function initGridSettings() {
         
         if (bgType === 'color') {
             bgValue = document.getElementById('bgColor').value;
-            await saveSettingsToServer(gridSize, blur, bgType, bgValue);
+            await saveSettingsToServer(iconSize, gridSize, blur, bgType, bgValue);
             modal.style.display = 'none';
         } else {
             const fileInput = document.getElementById('bgFile');
@@ -389,7 +408,7 @@ function initGridSettings() {
                 const reader = new FileReader();
                 reader.onload = async function(e) {
                     bgValue = e.target.result;
-                    await saveSettingsToServer(gridSize, blur, bgType, bgValue);
+                    await saveSettingsToServer(iconSize, gridSize, blur, bgType, bgValue);
                     modal.style.display = 'none';
                 };
                 reader.onerror = function() {
@@ -398,7 +417,7 @@ function initGridSettings() {
                 reader.readAsDataURL(file);
             } else {
                 bgValue = settings.grid?.bg_value || '';
-                await saveSettingsToServer(gridSize, blur, bgType, bgValue);
+                await saveSettingsToServer(iconSize, gridSize, blur, bgType, bgValue);
                 modal.style.display = 'none';
             }
         }
@@ -449,11 +468,12 @@ function initGridSettings() {
     });
 }
 
-async function saveSettingsToServer(gridSize, blur, bgType, bgValue) {
+async function saveSettingsToServer(iconSize, gridSize, blur, bgType, bgValue) {
     const newSettings = {
         grid: {
             cols: 2,
             rows: 6,
+            icon_size: iconSize,
             grid_size: gridSize,
             blur: blur,
             bg_type: bgType,
