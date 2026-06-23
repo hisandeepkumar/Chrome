@@ -16,16 +16,22 @@ from io import BytesIO
 from zeroconf import ServiceInfo, Zeroconf
 from PIL import Image, ImageDraw, ImageFont
 
+# ---------- Optional Windows shortcut parsing ----------
+try:
+    import win32com.client
+    HAS_WIN32COM = True
+except ImportError:
+    HAS_WIN32COM = False
+    print("⚠️ win32com not installed – Windows Apps detection disabled.")
+
 # ---------- User Data Directory ----------
 APPDATA = os.path.expandvars('%APPDATA%')
 USER_DIR = os.path.join(APPDATA, 'WinLauncher')
 ICON_DIR = os.path.join(USER_DIR, 'icons')
 CONFIG_FILE = os.path.join(USER_DIR, 'config.json')
 PWA_ICON_DIR = os.path.join(USER_DIR, 'pwa')
-WALLPAPER_DIR = os.path.join(USER_DIR, 'wallpaper')
 os.makedirs(ICON_DIR, exist_ok=True)
 os.makedirs(PWA_ICON_DIR, exist_ok=True)
-os.makedirs(WALLPAPER_DIR, exist_ok=True)
 
 # ---------- Flask Setup ----------
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -47,9 +53,10 @@ def generate_pwa_icons():
             img.save(path)
 generate_pwa_icons()
 
-# ---------- System App IDs ----------
-SYSTEM_APP_IDS = ['edit_shortcuts', 'grid_settings']
+# ---------- System Constants ----------
+SYSTEM_APP_IDS = ['edit_shortcuts', 'grid_settings', 'restore_windows_apps']
 SYSTEM_PAGE_NAME = "System Tools"
+WINDOWS_APPS_PAGE_NAME = "Windows Applications"
 
 # ---------- Default Apps ----------
 DEFAULT_APPS = [
@@ -76,8 +83,10 @@ DEFAULT_APPS = [
     {"id": "explorer", "name": "Explorer", "path": "explorer.exe", "icon": "📁"},
     {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "⌨️"},
     {"id": "closeall", "name": "Close Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"},
+    # System tools
     {"id": "edit_shortcuts", "name": "Edit Shortcuts", "path": "system:edit", "icon": "✏️", "is_system": True},
-    {"id": "grid_settings", "name": "Grid Settings", "path": "system:settings", "icon": "⚙️", "is_system": True}
+    {"id": "grid_settings", "name": "Grid Settings", "path": "system:settings", "icon": "⚙️", "is_system": True},
+    {"id": "restore_windows_apps", "name": "Restore Windows Apps", "path": "system:restore_windows", "icon": "🔄", "is_system": True}
 ]
 
 DEFAULT_SETTINGS = {
@@ -95,6 +104,127 @@ DEFAULT_SETTINGS = {
 def get_capacity():
     return DEFAULT_SETTINGS["grid"]["cols"] * DEFAULT_SETTINGS["grid"]["rows"]  # 12
 
+# ---------- Windows Apps Detection ----------
+def get_installed_windows_apps():
+    """Return list of installed Windows apps (name, target path)."""
+    if not HAS_WIN32COM:
+        return []
+    apps = []
+    try:
+        shell = win32com.client.Dispatch("WScript.Shell")
+        folders = [
+            os.path.expandvars("%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs"),
+            os.path.expandvars("%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs")
+        ]
+        seen = set()
+        for folder in folders:
+            if not os.path.exists(folder):
+                continue
+            for root, dirs, files in os.walk(folder):
+                for file in files:
+                    if file.lower().endswith('.lnk'):
+                        lnk_path = os.path.join(root, file)
+                        try:
+                            shortcut = shell.CreateShortcut(lnk_path)
+                            target = shortcut.TargetPath
+                            if target and target.lower().endswith('.exe') and target not in seen:
+                                seen.add(target)
+                                name = os.path.splitext(file)[0]
+                                name = name.replace(' - Shortcut', '').strip()
+                                # Create a stable ID based on target path
+                                app_id = f"winapp_{hash(target) & 0xFFFFFFFF:08x}"
+                                apps.append({
+                                    "id": app_id,
+                                    "name": name,
+                                    "path": target,
+                                    "icon": "🖥️",
+                                    "is_windows_app": True,
+                                    "is_system": True
+                                })
+                        except:
+                            pass
+    except Exception as e:
+        print(f"Error scanning Windows apps: {e}")
+    return apps
+
+def refresh_windows_apps():
+    """Re-scan for new Windows apps and add them to config, but keep user deletions."""
+    global config_data
+    installed = get_installed_windows_apps()
+    installed_ids = {app['id'] for app in installed}
+    
+    # Get existing windows apps from config (including user-deleted ones will be missing)
+    existing_windows_ids = {app['id'] for app in config_data['apps'] if app.get('is_windows_app', False)}
+    
+    # Find new apps that are installed but not in config
+    new_apps = []
+    for app in installed:
+        if app['id'] not in existing_windows_ids:
+            new_apps.append(app)
+    
+    if not new_apps:
+        # No new apps, but we need to ensure the windows page exists
+        ensure_windows_page_exists()
+        return len(new_apps)
+    
+    # Add new apps to config
+    config_data['apps'].extend(new_apps)
+    
+    # Ensure windows page exists
+    ensure_windows_page_exists()
+    
+    # Now we need to add new apps to the appropriate windows page(s)
+    # We'll rebuild windows pages from scratch (keeping existing page order)
+    rebuild_windows_pages()
+    
+    save_config(config_data)
+    return len(new_apps)
+
+def ensure_windows_page_exists():
+    """Create Windows Applications page(s) if none exist."""
+    # Check if any page has type 'windows_apps'
+    has_windows_page = any(p.get('type') == 'windows_apps' for p in config_data['pages'])
+    if has_windows_page:
+        return
+    # Create windows page(s)
+    rebuild_windows_pages()
+
+def rebuild_windows_pages():
+    """Rebuild the Windows Applications page(s) based on current windows apps in config."""
+    # Remove existing windows pages (they will be recreated)
+    config_data['pages'] = [p for p in config_data['pages'] if p.get('type') != 'windows_apps']
+    
+    # Get all windows apps from config
+    win_apps = [app for app in config_data['apps'] if app.get('is_windows_app', False)]
+    if not win_apps:
+        return
+    
+    capacity = get_capacity()
+    windows_pages = []
+    for i in range(0, len(win_apps), capacity):
+        page_apps = win_apps[i:i+capacity]
+        page_id = str(uuid.uuid4())[:8]
+        page_name = WINDOWS_APPS_PAGE_NAME if i == 0 else f"{WINDOWS_APPS_PAGE_NAME} {i//capacity + 1}"
+        windows_pages.append({
+            "id": page_id,
+            "name": page_name,
+            "type": "windows_apps",
+            "appIds": [app["id"] for app in page_apps]
+        })
+    
+    # Insert before system page
+    sys_index = None
+    for i, p in enumerate(config_data['pages']):
+        if p.get('name') == SYSTEM_PAGE_NAME:
+            sys_index = i
+            break
+    if sys_index is not None:
+        config_data['pages'][sys_index:sys_index] = windows_pages
+    else:
+        config_data['pages'].extend(windows_pages)
+    save_config(config_data)
+
+# ---------- Config Load ----------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         all_apps = DEFAULT_APPS[:]
@@ -157,7 +287,7 @@ def load_config():
         page['appIds'] = [aid for aid in page['appIds'] if aid not in SYSTEM_APP_IDS]
     
     # Rebuild normal pages with capacity
-    all_normal_app_ids = [app['id'] for app in data['apps'] if app['id'] not in SYSTEM_APP_IDS]
+    all_normal_app_ids = [app['id'] for app in data['apps'] if app['id'] not in SYSTEM_APP_IDS and not app.get('is_windows_app', False)]
     capacity = get_capacity()
     new_pages = []
     for idx, app_id in enumerate(all_normal_app_ids):
@@ -173,6 +303,38 @@ def load_config():
         page_id = str(uuid.uuid4())[:8]
         new_pages.append({"id": page_id, "name": "Page 1", "appIds": []})
     
+    # Now handle windows apps
+    # Remove any existing windows pages (they will be recreated)
+    data['pages'] = [p for p in data['pages'] if p.get('type') != 'windows_apps']
+    # Get windows apps from data (they should already be there)
+    win_apps = [app for app in data['apps'] if app.get('is_windows_app', False)]
+    if win_apps:
+        win_page_apps = []
+        for i in range(0, len(win_apps), capacity):
+            page_apps = win_apps[i:i+capacity]
+            page_id = str(uuid.uuid4())[:8]
+            page_name = WINDOWS_APPS_PAGE_NAME if i == 0 else f"{WINDOWS_APPS_PAGE_NAME} {i//capacity + 1}"
+            win_page_apps.append({
+                "id": page_id,
+                "name": page_name,
+                "type": "windows_apps",
+                "appIds": [app["id"] for app in page_apps]
+            })
+        # Insert before system page
+        sys_index = None
+        for i, p in enumerate(new_pages):
+            if p.get('name') == SYSTEM_PAGE_NAME:
+                sys_index = i
+                break
+        if sys_index is not None:
+            new_pages[sys_index:sys_index] = win_page_apps
+        else:
+            new_pages.extend(win_page_apps)
+    else:
+        # No windows apps, but we might have a windows page leftover? Already removed.
+        pass
+    
+    # Add system page at the end
     new_pages.append(system_page)
     data['pages'] = new_pages
     
@@ -209,6 +371,7 @@ def serve_pwa_icon(filename):
 def serve_user_icon(filename):
     return send_from_directory(ICON_DIR, filename)
 
+# ---------- Apps API ----------
 @app.route('/api/apps', methods=['GET'])
 def get_apps():
     return jsonify(config_data['apps'])
@@ -226,6 +389,12 @@ def add_or_edit_app():
         return jsonify({"status": "error", "msg": "Path required"}), 400
     if not name:
         name = ""
+
+    # Prevent editing windows apps
+    if edit_id:
+        for app in config_data['apps']:
+            if app['id'] == edit_id and app.get('is_windows_app', False):
+                return jsonify({"status": "error", "msg": "Cannot edit Windows app"}), 400
 
     if edit_id:
         for app in config_data['apps']:
@@ -245,50 +414,33 @@ def add_or_edit_app():
         if file and file.filename:
             file.save(os.path.join(ICON_DIR, f'{new_id}.png'))
         
-        # Find target page
+        # Find target page (skip windows and system pages)
         target_page = None
         if page_id:
             for page in config_data['pages']:
-                if page['id'] == page_id:
+                if page['id'] == page_id and page.get('type') not in ['windows_apps', 'system']:
                     target_page = page
                     break
         capacity = get_capacity()
-        if not target_page or len(target_page['appIds']) >= capacity:
-            if target_page:
-                # Create new page after target_page with same name
-                base_name = target_page['name']
-                # If name ends with a number, increment it
-                match = re.search(r'(\d+)$', base_name)
-                if match:
-                    num = int(match.group(1)) + 1
-                    new_name = re.sub(r'\d+$', str(num), base_name)
-                else:
-                    new_name = base_name + ' 2'
-                target_index = config_data['pages'].index(target_page)
-                new_page_id = str(uuid.uuid4())[:8]
-                new_page = {"id": new_page_id, "name": new_name, "appIds": []}
-                config_data['pages'].insert(target_index + 1, new_page)
-                target_page = new_page
+        if not target_page:
+            for page in config_data['pages']:
+                if page.get('type') not in ['windows_apps', 'system'] and len(page['appIds']) < capacity:
+                    target_page = page
+                    break
+        if not target_page:
+            # Create new page before windows/system pages
+            sys_index = None
+            for i, p in enumerate(config_data['pages']):
+                if p.get('type') in ['windows_apps', 'system']:
+                    sys_index = i
+                    break
+            new_page_id = str(uuid.uuid4())[:8]
+            new_page = {"id": new_page_id, "name": f"Page {len(config_data['pages'])}", "appIds": []}
+            if sys_index is not None:
+                config_data['pages'].insert(sys_index, new_page)
             else:
-                # Find first page with space (excluding system)
-                for page in config_data['pages']:
-                    if len(page['appIds']) < capacity and page.get('name') != SYSTEM_PAGE_NAME:
-                        target_page = page
-                        break
-                if not target_page:
-                    # Create new page at end (before system)
-                    sys_index = None
-                    for i, p in enumerate(config_data['pages']):
-                        if p.get('name') == SYSTEM_PAGE_NAME:
-                            sys_index = i
-                            break
-                    new_page_id = str(uuid.uuid4())[:8]
-                    new_page = {"id": new_page_id, "name": f"Page {len(config_data['pages'])}", "appIds": []}
-                    if sys_index is not None:
-                        config_data['pages'].insert(sys_index, new_page)
-                    else:
-                        config_data['pages'].append(new_page)
-                    target_page = new_page
+                config_data['pages'].append(new_page)
+            target_page = new_page
         target_page['appIds'].append(new_id)
         save_config(config_data)
         return jsonify({"status": "added", "app": new_app})
@@ -297,6 +449,7 @@ def add_or_edit_app():
 def delete_app(app_id):
     if app_id in SYSTEM_APP_IDS:
         return jsonify({"status": "error", "msg": "Cannot delete system app"}), 400
+    # Allow deletion of windows apps (they will be re-added only if user clicks restore)
     config_data['apps'] = [a for a in config_data['apps'] if a['id'] != app_id]
     icon_path = os.path.join(ICON_DIR, f'{app_id}.png')
     if os.path.exists(icon_path):
@@ -313,7 +466,12 @@ def launch_app(app_id):
         if app['id'] == app_id:
             path = app['path']
             if path.startswith('system:'):
-                return jsonify({"status": "system", "action": path.split(':', 1)[1]})
+                action = path.split(':', 1)[1]
+                if action == 'restore_windows':
+                    # Refresh windows apps: add new ones, but keep user deletions
+                    count = refresh_windows_apps()
+                    return jsonify({"status": "restored", "count": count})
+                return jsonify({"status": "system", "action": action})
             try:
                 if path.startswith('http') or path.startswith('https') or path.startswith('about:'):
                     subprocess.Popen(['start', path], shell=True)
@@ -341,9 +499,11 @@ def get_pages():
 @app.route('/api/pages', methods=['POST'])
 def add_page():
     name = request.json.get('name', 'New Page')
+    if name in [SYSTEM_PAGE_NAME, WINDOWS_APPS_PAGE_NAME]:
+        return jsonify({"status": "error", "msg": "Reserved page name"}), 400
     sys_index = None
     for i, p in enumerate(config_data['pages']):
-        if p.get('name') == SYSTEM_PAGE_NAME:
+        if p.get('type') in ['windows_apps', 'system']:
             sys_index = i
             break
     page_id = str(uuid.uuid4())[:8]
@@ -358,8 +518,12 @@ def add_page():
 @app.route('/api/pages/<page_id>', methods=['DELETE'])
 def delete_page(page_id):
     for page in config_data['pages']:
-        if page['id'] == page_id and page.get('name') == SYSTEM_PAGE_NAME:
-            return jsonify({"status": "error", "msg": "Cannot delete system page"}), 400
+        if page['id'] == page_id:
+            if page.get('type') == 'system':
+                return jsonify({"status": "error", "msg": "Cannot delete system page"}), 400
+            # For windows page, we delete the page but keep the apps in config (they will be hidden)
+            # The apps remain in config so they can be restored later.
+            break
     config_data['pages'] = [p for p in config_data['pages'] if p['id'] != page_id]
     save_config(config_data)
     return jsonify({"status": "deleted"})
@@ -369,8 +533,8 @@ def rename_page(page_id):
     new_name = request.json.get('name')
     for page in config_data['pages']:
         if page['id'] == page_id:
-            if page.get('name') == SYSTEM_PAGE_NAME:
-                return jsonify({"status": "error", "msg": "Cannot rename system page"}), 400
+            if page.get('type') in ['windows_apps', 'system']:
+                return jsonify({"status": "error", "msg": "Cannot rename special page"}), 400
             page['name'] = new_name
             save_config(config_data)
             return jsonify({"status": "renamed"})
@@ -379,23 +543,29 @@ def rename_page(page_id):
 @app.route('/api/pages/reorder', methods=['POST'])
 def reorder_pages():
     new_order = request.json.get('order', [])
-    system_page = None
-    other_pages = []
-    for p in config_data['pages']:
-        if p.get('name') == SYSTEM_PAGE_NAME:
-            system_page = p
-        else:
-            other_pages.append(p)
-    page_map = {p['id']: p for p in other_pages}
-    reordered = []
+    system_pages = []
+    windows_pages = []
+    normal_pages = []
+    page_map = {p['id']: p for p in config_data['pages']}
     for pid in new_order:
-        if pid in page_map:
-            reordered.append(page_map[pid])
-    for p in other_pages:
-        if p not in reordered:
-            reordered.append(p)
-    if system_page:
-        reordered.append(system_page)
+        p = page_map.get(pid)
+        if not p:
+            continue
+        if p.get('type') == 'system':
+            system_pages.append(p)
+        elif p.get('type') == 'windows_apps':
+            windows_pages.append(p)
+        else:
+            normal_pages.append(p)
+    for p in config_data['pages']:
+        if p not in normal_pages and p not in windows_pages and p not in system_pages:
+            if p.get('type') == 'system':
+                system_pages.append(p)
+            elif p.get('type') == 'windows_apps':
+                windows_pages.append(p)
+            else:
+                normal_pages.append(p)
+    reordered = normal_pages + windows_pages + system_pages
     config_data['pages'] = reordered
     save_config(config_data)
     return jsonify({"status": "ok"})
@@ -409,8 +579,10 @@ def move_app():
     from_index = data.get('fromIndex')
     to_index = data.get('toIndex')
     
-    if app_id in SYSTEM_APP_IDS:
-        return jsonify({"status": "error", "msg": "Cannot move system app"}), 400
+    # Prevent moving windows apps
+    for app in config_data['apps']:
+        if app['id'] == app_id and app.get('is_windows_app'):
+            return jsonify({"status": "error", "msg": "Cannot move Windows app"}), 400
     
     if from_page_id:
         for page in config_data['pages']:
@@ -420,8 +592,8 @@ def move_app():
                 break
     if to_page_id is not None:
         for page in config_data['pages']:
-            if page['id'] == to_page_id and page.get('name') == SYSTEM_PAGE_NAME:
-                return jsonify({"status": "error", "msg": "Cannot move app to system page"}), 400
+            if page['id'] == to_page_id and page.get('type') in ['windows_apps', 'system']:
+                return jsonify({"status": "error", "msg": "Cannot move to special page"}), 400
         for page in config_data['pages']:
             if page['id'] == to_page_id:
                 if to_index is not None:
@@ -447,12 +619,10 @@ def save_settings():
     save_config(config_data)
     return jsonify({"status": "ok"})
 
-# ---------- Export / Import (with icons) ----------
+# ---------- Export / Import ----------
 @app.route('/api/export', methods=['GET'])
 def export_config():
-    # Copy config_data
     export_data = config_data.copy()
-    # Add icons as base64
     icons = {}
     for app in config_data['apps']:
         app_id = app['id']
@@ -470,7 +640,6 @@ def import_config():
     if not imported or 'apps' not in imported or 'pages' not in imported or 'settings' not in imported:
         return jsonify({"status": "error", "msg": "Invalid data"}), 400
     
-    # Restore icons
     if 'icons' in imported:
         for app_id, icon_base64 in imported['icons'].items():
             icon_path = os.path.join(ICON_DIR, f'{app_id}.png')
@@ -479,13 +648,18 @@ def import_config():
                 with open(icon_path, 'wb') as f:
                     f.write(icon_data)
             except:
-                pass  # ignore if invalid
-    # Remove icons from data before saving (we don't need to store them)
+                pass
     imported.pop('icons', None)
     global config_data
     config_data = imported
     save_config(config_data)
     return jsonify({"status": "ok"})
+
+# ---------- Windows Apps Refresh (separate endpoint) ----------
+@app.route('/api/windows-apps/refresh', methods=['POST'])
+def refresh_windows():
+    count = refresh_windows_apps()
+    return jsonify({"status": "refreshed", "count": count})
 
 # ---------- mDNS ----------
 def register_mdns():
