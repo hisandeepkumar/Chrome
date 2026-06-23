@@ -33,29 +33,29 @@ body {
 }
 .app-container::-webkit-scrollbar { display: none; }
 
-/* Page – flex column, centered */
+/* Page – flex column, centered, with min 100px padding on all sides */
 .page {
     flex: 0 0 100%;
     height: 100%;
     scroll-snap-align: start;
     display: flex;
     flex-direction: column;
-    justify-content: center;  /* default: center the grid */
+    justify-content: center;
     align-items: center;
-    padding: 20px 20px 20px 20px;
+    padding: 100px 100px 100px 100px;  /* minimum 100px from each edge */
     position: relative;
+    transition: padding 0.2s;
 }
 
-/* When pill is present, we need top space for pill, but we still center the grid in remaining space */
+/* When pill is shown, we need extra top space for pill */
 .page.has-pill {
-    justify-content: flex-start;  /* will position grid below pill */
-    padding-top: 70px;  /* enough space for pill */
+    padding-top: 140px;  /* 100px + pill height */
 }
 
-/* Page name pill – only shown when custom name */
+/* Page name pill – only shown for custom names */
 .page-name-pill {
     position: absolute;
-    top: 20px;
+    top: 100px;  /* aligns with top padding */
     left: 50%;
     transform: translateX(-50%);
     background: rgba(255,255,255,0.15);
@@ -70,27 +70,28 @@ body {
     text-shadow: 0 2px 4px rgba(0,0,0,0.3);
     box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
     letter-spacing: 0.5px;
-    z-index: 5;  /* same layer as grid */
+    z-index: 5;
     max-width: 80%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    pointer-events: none;  /* so clicks pass through to apps */
+    pointer-events: none;
 }
 
-/* Grid container – takes full width and remaining height */
+/* Grid container – centered, auto margins, respects padding */
 .page-grid {
     display: grid;
     gap: 16px;
     width: 100%;
-    max-width: 600px;
+    max-width: 600px;  /* prevent too wide */
     height: 100%;
     justify-items: center;
     align-content: center;
-    padding: 10px 0;
+    margin: 0 auto;  /* center horizontally */
+    padding: 0;
 }
 
-/* 3D Glass Button – name inside, uniform border */
+/* 3D Glass Button – SQUARE */
 .app-card.glass-button {
     display: flex;
     flex-direction: column;
@@ -100,14 +101,14 @@ body {
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
     width: var(--icon-size, 64px);
-    height: calc(var(--icon-size, 64px) * 1.4);
+    height: var(--icon-size, 64px);  /* square */
     background: linear-gradient(145deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05));
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255,255,255,0.15);
     border-radius: 16px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.3);
-    padding: 8px 4px;
+    padding: 4px;  /* small inner padding */
     gap: 2px;
     user-select: none;
     -webkit-user-drag: none;
@@ -132,13 +133,14 @@ body {
     transform: scale(0.95);
 }
 
+/* Icon inside square – scaled down to fit with name */
 .app-card .icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: calc(var(--icon-size, 64px) * 0.7);
-    height: calc(var(--icon-size, 64px) * 0.7);
-    font-size: calc(var(--icon-size, 64px) * 0.6);
+    width: calc(var(--icon-size, 64px) * 0.6);
+    height: calc(var(--icon-size, 64px) * 0.6);
+    font-size: calc(var(--icon-size, 64px) * 0.5);
     line-height: 1;
     text-align: center;
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
@@ -147,21 +149,22 @@ body {
 
 .app-card .icon-img {
     display: block;
-    width: calc(var(--icon-size, 64px) * 0.7);
-    height: calc(var(--icon-size, 64px) * 0.7);
+    width: calc(var(--icon-size, 64px) * 0.6);
+    height: calc(var(--icon-size, 64px) * 0.6);
     border-radius: 12px;
     object-fit: cover;
     border: 1px solid rgba(255,255,255,0.1);
 }
 
 .app-card .name {
-    font-size: 0.6rem;
+    font-size: 0.55rem;
     color: rgba(255,255,255,0.8);
-    max-width: 60px;
+    max-width: calc(var(--icon-size, 64px) * 0.8);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    line-height: 1.2;
 }
 .app-card .name:empty { display: none; }
 
@@ -237,7 +240,6 @@ body {
 .close-btn { font-size:28px; color:#aaa; cursor:pointer; background:none; border:none; }
 .close-btn:hover { color:white; }
 
-/* Page Tabs (draggable) */
 .page-tabs {
     display: flex;
     gap: 10px;
