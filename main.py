@@ -43,7 +43,11 @@ def generate_pwa_icons():
             img.save(path)
 generate_pwa_icons()
 
-# ---------- Default Apps ----------
+# ---------- System App IDs ----------
+SYSTEM_APP_IDS = ['edit_shortcuts', 'grid_settings']
+SYSTEM_PAGE_NAME = "System Tools"
+
+# ---------- Default Apps (including system tools) ----------
 DEFAULT_APPS = [
     {"id": "whatsapp", "name": "WhatsApp", "path": "https://web.whatsapp.com", "icon": "💬"},
     {"id": "youtube", "name": "YouTube", "path": "https://youtube.com", "icon": "▶️"},
@@ -68,6 +72,7 @@ DEFAULT_APPS = [
     {"id": "explorer", "name": "Explorer", "path": "explorer.exe", "icon": "📁"},
     {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "⌨️"},
     {"id": "closeall", "name": "Close Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"},
+    # System tools – these will be placed in a dedicated last page
     {"id": "edit_shortcuts", "name": "Edit Shortcuts", "path": "system:edit", "icon": "✏️", "is_system": True},
     {"id": "grid_settings", "name": "Grid Settings", "path": "system:settings", "icon": "⚙️", "is_system": True}
 ]
@@ -89,18 +94,30 @@ def get_capacity():
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        # Create default pages, each with up to capacity apps
+        # Create default pages: first page with first 12 apps (excluding system), then system page
         all_apps = DEFAULT_APPS[:]
+        # Separate system apps
+        system_apps = [a for a in all_apps if a['id'] in SYSTEM_APP_IDS]
+        normal_apps = [a for a in all_apps if a['id'] not in SYSTEM_APP_IDS]
+        
         pages = []
         capacity = get_capacity()
-        for i in range(0, len(all_apps), capacity):
-            page_apps = all_apps[i:i+capacity]
+        # Normal pages
+        for i in range(0, len(normal_apps), capacity):
+            page_apps = normal_apps[i:i+capacity]
             page_id = str(uuid.uuid4())[:8]
             pages.append({
                 "id": page_id,
                 "name": f"Page {len(pages)+1}",
                 "appIds": [app["id"] for app in page_apps]
             })
+        # System page (last)
+        sys_page_id = str(uuid.uuid4())[:8]
+        pages.append({
+            "id": sys_page_id,
+            "name": SYSTEM_PAGE_NAME,
+            "appIds": [a["id"] for a in system_apps]
+        })
         data = {
             "apps": all_apps,
             "pages": pages,
@@ -113,74 +130,67 @@ def load_config():
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
     
-    # Ensure apps list has all defaults, add new ones if missing
+    # Ensure all default apps are present (including system)
     existing_ids = {app['id'] for app in data.get('apps', [])}
-    new_apps = []
     for default_app in DEFAULT_APPS:
         if default_app['id'] not in existing_ids:
-            new_apps.append(default_app)
-    if new_apps:
-        data['apps'].extend(new_apps)
+            data['apps'].append(default_app)
     
-    # Ensure pages exist and are properly filled within capacity
-    if 'pages' not in data or not data['pages']:
-        data['pages'] = []
+    # Ensure system apps are in the last page (and only there)
+    system_page = None
+    other_pages = []
+    for page in data.get('pages', []):
+        if page.get('name') == SYSTEM_PAGE_NAME:
+            system_page = page
+        else:
+            other_pages.append(page)
+    
+    if not system_page:
+        # Create system page
+        sys_page_id = str(uuid.uuid4())[:8]
+        system_page = {"id": sys_page_id, "name": SYSTEM_PAGE_NAME, "appIds": []}
+        other_pages.append(system_page)  # will be moved to last after rebuild
+    
+    # Ensure system page has only system apps
+    system_page['appIds'] = [aid for aid in system_page['appIds'] if aid in SYSTEM_APP_IDS]
+    # Add any missing system apps
+    for aid in SYSTEM_APP_IDS:
+        if aid not in system_page['appIds']:
+            system_page['appIds'].append(aid)
+    # Remove system apps from other pages
+    for page in other_pages:
+        page['appIds'] = [aid for aid in page['appIds'] if aid not in SYSTEM_APP_IDS]
+    
+    # Now redistribute normal apps across other pages (capacity)
+    # Get all normal app IDs (excluding system)
+    all_normal_app_ids = [app['id'] for app in data['apps'] if app['id'] not in SYSTEM_APP_IDS]
+    # Flatten current normal app IDs from other pages
+    current_normal_ids = []
+    for page in other_pages:
+        current_normal_ids.extend(page['appIds'])
+    # Keep order as in all_normal_app_ids
+    # We'll rebuild other pages from scratch to ensure capacity
     capacity = get_capacity()
-    # Rebuild pages if needed: take all app IDs and distribute
-    all_app_ids = [app['id'] for app in data['apps']]
-    # Remove system apps from distribution (they stay in pages? Actually they are part of apps but we might not want them in pages? But they are in apps)
-    # We'll keep them as normal.
-    # Redistribute apps across pages with capacity
-    if data['pages']:
-        # Check if any page exceeds capacity or if total pages capacity is less than apps
-        total_capacity = len(data['pages']) * capacity
-        if len(all_app_ids) > total_capacity:
-            # Need more pages
-            extra_pages_needed = (len(all_app_ids) - total_capacity + capacity - 1) // capacity
-            for i in range(extra_pages_needed):
-                page_id = str(uuid.uuid4())[:8]
-                data['pages'].append({"id": page_id, "name": f"Page {len(data['pages'])+1}", "appIds": []})
-        # Now distribute app ids into pages
-        # Flatten existing appIds from all pages
-        current_app_ids = []
-        for page in data['pages']:
-            current_app_ids.extend(page['appIds'])
-        # Remove duplicates and add missing apps
-        # We'll rebuild page appIds from scratch based on order
-        # First, preserve order of apps as they appear in data['apps']
-        # We'll take all app ids in order from apps list
-        ordered_app_ids = [app['id'] for app in data['apps']]
-        # Now assign to pages sequentially
-        page_index = 0
-        for idx, app_id in enumerate(ordered_app_ids):
-            # Find a page that has this app id, if not, add to current page
-            found = False
-            for page in data['pages']:
-                if app_id in page['appIds']:
-                    found = True
-                    break
-            if not found:
-                # Add to current page, if page full move to next
-                while len(data['pages'][page_index]['appIds']) >= capacity:
-                    page_index += 1
-                    if page_index >= len(data['pages']):
-                        # create new page
-                        new_page_id = str(uuid.uuid4())[:8]
-                        data['pages'].append({"id": new_page_id, "name": f"Page {len(data['pages'])+1}", "appIds": []})
-                data['pages'][page_index]['appIds'].append(app_id)
-        # Remove any app ids that are not in apps list
-        valid_app_ids = {app['id'] for app in data['apps']}
-        for page in data['pages']:
-            page['appIds'] = [aid for aid in page['appIds'] if aid in valid_app_ids]
-    else:
-        # No pages, create them
-        ordered_app_ids = [app['id'] for app in data['apps']]
-        page_index = 0
-        for idx, app_id in enumerate(ordered_app_ids):
-            if idx % capacity == 0:
-                page_id = str(uuid.uuid4())[:8]
-                data['pages'].append({"id": page_id, "name": f"Page {len(data['pages'])+1}", "appIds": []})
-            data['pages'][-1]['appIds'].append(app_id)
+    new_pages = []
+    page_index = 0
+    for idx, app_id in enumerate(all_normal_app_ids):
+        if idx % capacity == 0:
+            page_id = str(uuid.uuid4())[:8]
+            new_pages.append({
+                "id": page_id,
+                "name": f"Page {len(new_pages)+1}",
+                "appIds": []
+            })
+        new_pages[-1]['appIds'].append(app_id)
+    # If there are no normal apps, at least one page
+    if not new_pages:
+        page_id = str(uuid.uuid4())[:8]
+        new_pages.append({"id": page_id, "name": "Page 1", "appIds": []})
+    
+    # Add system page as last
+    new_pages.append(system_page)
+    
+    data['pages'] = new_pages
     
     # Ensure settings exist
     if 'settings' not in data:
@@ -188,7 +198,6 @@ def load_config():
     elif 'grid' not in data['settings']:
         data['settings']['grid'] = DEFAULT_SETTINGS['grid']
     
-    # Save the corrected config
     with open(CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
     
@@ -229,6 +238,7 @@ def add_or_edit_app():
     icon_emoji = request.form.get('icon', '📦')
     edit_id = request.form.get('edit_id')
     file = request.files.get('icon_file')
+    page_id = request.form.get('page_id')  # new: which page to add to
 
     if not path:
         return jsonify({"status": "error", "msg": "Path required"}), 400
@@ -236,6 +246,7 @@ def add_or_edit_app():
         name = ""
 
     if edit_id:
+        # Edit existing app – page stays unchanged
         for app in config_data['apps']:
             if app['id'] == edit_id:
                 app['name'] = name
@@ -253,26 +264,51 @@ def add_or_edit_app():
         if file and file.filename:
             file.save(os.path.join(ICON_DIR, f'{new_id}.png'))
         
-        # Find a page with space
-        capacity = get_capacity()
+        # Add to specified page or find suitable page
         target_page = None
-        for page in config_data['pages']:
-            if len(page['appIds']) < capacity:
-                target_page = page
-                break
-        if target_page is None:
-            # Create new page
-            page_id = str(uuid.uuid4())[:8]
-            page_num = len(config_data['pages']) + 1
-            target_page = {"id": page_id, "name": f"Page {page_num}", "appIds": []}
-            config_data['pages'].append(target_page)
+        if page_id:
+            # Find the page
+            for page in config_data['pages']:
+                if page['id'] == page_id:
+                    target_page = page
+                    break
+        # If no target page or it's the system page, find first page with space
+        if not target_page or target_page.get('name') == SYSTEM_PAGE_NAME:
+            for page in config_data['pages']:
+                if page.get('name') != SYSTEM_PAGE_NAME and len(page['appIds']) < get_capacity():
+                    target_page = page
+                    break
+            if not target_page:
+                # Create new page after the last normal page (before system page)
+                # Find index of system page
+                sys_index = None
+                for i, p in enumerate(config_data['pages']):
+                    if p.get('name') == SYSTEM_PAGE_NAME:
+                        sys_index = i
+                        break
+                if sys_index is None:
+                    # System page not found, add at end
+                    new_page_id = str(uuid.uuid4())[:8]
+                    new_page = {"id": new_page_id, "name": f"Page {len(config_data['pages'])+1}", "appIds": []}
+                    config_data['pages'].append(new_page)
+                    target_page = new_page
+                else:
+                    # Insert before system page
+                    new_page_id = str(uuid.uuid4())[:8]
+                    page_num = sys_index + 1  # since system page is at sys_index
+                    new_page = {"id": new_page_id, "name": f"Page {page_num}", "appIds": []}
+                    config_data['pages'].insert(sys_index, new_page)
+                    target_page = new_page
+        # Now add app to target page
         target_page['appIds'].append(new_id)
-        
         save_config(config_data)
         return jsonify({"status": "added", "app": new_app})
 
 @app.route('/api/apps/<app_id>', methods=['DELETE'])
 def delete_app(app_id):
+    # Prevent deletion of system apps
+    if app_id in SYSTEM_APP_IDS:
+        return jsonify({"status": "error", "msg": "Cannot delete system app"}), 400
     config_data['apps'] = [a for a in config_data['apps'] if a['id'] != app_id]
     icon_path = os.path.join(ICON_DIR, f'{app_id}.png')
     if os.path.exists(icon_path):
@@ -317,14 +353,27 @@ def get_pages():
 @app.route('/api/pages', methods=['POST'])
 def add_page():
     name = request.json.get('name', 'New Page')
+    # Add before system page if exists, else at end
+    sys_index = None
+    for i, p in enumerate(config_data['pages']):
+        if p.get('name') == SYSTEM_PAGE_NAME:
+            sys_index = i
+            break
     page_id = str(uuid.uuid4())[:8]
     new_page = {"id": page_id, "name": name, "appIds": []}
-    config_data['pages'].append(new_page)
+    if sys_index is not None:
+        config_data['pages'].insert(sys_index, new_page)
+    else:
+        config_data['pages'].append(new_page)
     save_config(config_data)
     return jsonify({"status": "added", "page": new_page})
 
 @app.route('/api/pages/<page_id>', methods=['DELETE'])
 def delete_page(page_id):
+    # Prevent deletion of system page
+    for page in config_data['pages']:
+        if page['id'] == page_id and page.get('name') == SYSTEM_PAGE_NAME:
+            return jsonify({"status": "error", "msg": "Cannot delete system page"}), 400
     config_data['pages'] = [p for p in config_data['pages'] if p['id'] != page_id]
     save_config(config_data)
     return jsonify({"status": "deleted"})
@@ -334,6 +383,9 @@ def rename_page(page_id):
     new_name = request.json.get('name')
     for page in config_data['pages']:
         if page['id'] == page_id:
+            # Prevent renaming system page
+            if page.get('name') == SYSTEM_PAGE_NAME:
+                return jsonify({"status": "error", "msg": "Cannot rename system page"}), 400
             page['name'] = new_name
             save_config(config_data)
             return jsonify({"status": "renamed"})
@@ -342,14 +394,27 @@ def rename_page(page_id):
 @app.route('/api/pages/reorder', methods=['POST'])
 def reorder_pages():
     new_order = request.json.get('order', [])
-    page_map = {p['id']: p for p in config_data['pages']}
+    # Ensure system page stays last
+    system_page = None
+    other_pages = []
+    for p in config_data['pages']:
+        if p.get('name') == SYSTEM_PAGE_NAME:
+            system_page = p
+        else:
+            other_pages.append(p)
+    # Reorder other pages according to new_order (filter out system)
+    page_map = {p['id']: p for p in other_pages}
     reordered = []
     for pid in new_order:
         if pid in page_map:
             reordered.append(page_map[pid])
-    for p in config_data['pages']:
+    # Add any missing pages (shouldn't happen)
+    for p in other_pages:
         if p not in reordered:
             reordered.append(p)
+    # Append system page at the end
+    if system_page:
+        reordered.append(system_page)
     config_data['pages'] = reordered
     save_config(config_data)
     return jsonify({"status": "ok"})
@@ -363,6 +428,10 @@ def move_app():
     from_index = data.get('fromIndex')
     to_index = data.get('toIndex')
     
+    # Prevent moving system apps
+    if app_id in SYSTEM_APP_IDS:
+        return jsonify({"status": "error", "msg": "Cannot move system app"}), 400
+    
     if from_page_id:
         for page in config_data['pages']:
             if page['id'] == from_page_id:
@@ -370,6 +439,10 @@ def move_app():
                     page['appIds'].remove(app_id)
                 break
     if to_page_id is not None:
+        # Prevent moving to system page
+        for page in config_data['pages']:
+            if page['id'] == to_page_id and page.get('name') == SYSTEM_PAGE_NAME:
+                return jsonify({"status": "error", "msg": "Cannot move app to system page"}), 400
         for page in config_data['pages']:
             if page['id'] == to_page_id:
                 if to_index is not None:
@@ -410,7 +483,7 @@ def import_config():
     save_config(config_data)
     return jsonify({"status": "ok"})
 
-# ---------- mDNS (for local network discovery) ----------
+# ---------- mDNS ----------
 def register_mdns():
     zeroconf = Zeroconf()
     info = ServiceInfo(
@@ -425,7 +498,7 @@ def register_mdns():
     print(f"✅ mDNS: http://winlauncher.local:{PORT}")
     return zeroconf
 
-# ---------- PyQt QR Window (shows local IP) ----------
+# ---------- PyQt QR Window ----------
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
