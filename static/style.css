@@ -466,6 +466,27 @@ body {
     }
 }
 
+/* Edit page name button – circular pencil */
+.edit-name-btn {
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: white;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.edit-name-btn:hover {
+    background: rgba(255,255,255,0.2);
+    transform: scale(1.05);
+}
+
 @media (max-width: 500px) {
     .fullscreen-btn { top:10px; right:10px; font-size:1rem; padding:4px 10px; }
     .page-name-pill { font-size: 1rem; padding: 6px 16px; }
