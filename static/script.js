@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    fetchApps();
+    fetchAppsAndPages();
     fetchSettings();
     initFullscreen();
     initGridSettings();
@@ -11,8 +11,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ---------- Global State ----------
 let appsData = [];
+let pagesData = [];
 let settings = {};
 let currentPage = 0;
+let currentEditPageId = null; // which page is being edited
 
 // ---------- LocalStorage Management ----------
 function saveSettingsToLocal(settingsObj) {
@@ -33,12 +35,16 @@ function loadSettingsFromLocal() {
     }
 }
 
-// ---------- Fetch Apps & Settings ----------
-async function fetchApps() {
+// ---------- Fetch Apps & Pages ----------
+async function fetchAppsAndPages() {
     try {
-        const res = await fetch('/api/apps');
-        appsData = await res.json();
-        renderPages(appsData);
+        const [appsRes, pagesRes] = await Promise.all([
+            fetch('/api/apps'),
+            fetch('/api/pages')
+        ]);
+        appsData = await appsRes.json();
+        pagesData = await pagesRes.json();
+        renderPages();
     } catch (e) {
         console.error(e);
     }
@@ -69,34 +75,49 @@ async function fetchSettings() {
 }
 
 // ---------- Render Pages ----------
-function renderPages(apps) {
+function renderPages() {
     const container = document.getElementById('appContainer');
     container.innerHTML = '';
     const cols = getCols();
     const rows = getRows();
-    const itemsPerPage = cols * rows;
-    const totalPages = Math.ceil(apps.length / itemsPerPage) || 1;
-    for (let p = 0; p < totalPages; p++) {
-        const page = document.createElement('div');
-        page.className = 'page';
-        page.dataset.page = p;
-        page.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-        page.style.gridTemplateRows = `repeat(${rows}, auto)`;
-        const pageApps = apps.slice(p * itemsPerPage, (p + 1) * itemsPerPage);
-        pageApps.forEach(app => {
-            const card = createAppCard(app);
-            page.appendChild(card);
+    pagesData.forEach((page, idx) => {
+        const pageDiv = document.createElement('div');
+        pageDiv.className = 'page';
+        pageDiv.dataset.pageIndex = idx;
+        pageDiv.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        pageDiv.style.gridTemplateRows = `repeat(${rows}, auto)`;
+        
+        // Page name pill
+        const namePill = document.createElement('div');
+        namePill.className = 'page-name-pill';
+        namePill.textContent = page.name || 'Page';
+        pageDiv.appendChild(namePill);
+        
+        // Apps grid
+        const gridDiv = document.createElement('div');
+        gridDiv.className = 'page-grid';
+        gridDiv.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        gridDiv.style.gridTemplateRows = `repeat(${rows}, auto)`;
+        
+        const appIds = page.appIds || [];
+        appIds.forEach(appId => {
+            const app = appsData.find(a => a.id === appId);
+            if (app) {
+                const card = createAppCard(app);
+                gridDiv.appendChild(card);
+            }
         });
-        container.appendChild(page);
-    }
-    updateIndicators(totalPages);
+        pageDiv.appendChild(gridDiv);
+        container.appendChild(pageDiv);
+    });
+    updateIndicators(pagesData.length);
     container.scrollLeft = 0;
     currentPage = 0;
 }
 
 function createAppCard(app) {
     const card = document.createElement('div');
-    card.className = 'app-card';
+    card.className = 'app-card glass-button';
     card.dataset.id = app.id;
     let iconHtml = `<span class="icon">${app.icon || '📦'}</span>`;
     fetch(`/user-icons/${app.id}.png`, { method: 'HEAD' })
@@ -121,19 +142,32 @@ function createAppCard(app) {
     return card;
 }
 
-// ---------- Columns and Rows with swap on landscape ----------
+function getCols() {
+    // always return the fixed values (no user change)
+    return 2; // portrait cols
+}
+
+function getRows() {
+    return 6; // portrait rows
+}
+
+function getColsLandscape() {
+    return 6; // swapped
+}
+
+function getRowsLandscape() {
+    return 2;
+}
+
+// Override getCols/getRows to swap on landscape
 function getCols() {
     const isLandscape = window.innerWidth > window.innerHeight;
-    const cols = settings.grid?.cols || 2;
-    const rows = settings.grid?.rows || 6;
-    return isLandscape ? rows : cols;
+    return isLandscape ? 6 : 2;
 }
 
 function getRows() {
     const isLandscape = window.innerWidth > window.innerHeight;
-    const cols = settings.grid?.cols || 2;
-    const rows = settings.grid?.rows || 6;
-    return isLandscape ? cols : rows;
+    return isLandscape ? 2 : 6;
 }
 
 function updateIndicators(total) {
@@ -157,10 +191,6 @@ function applySettings() {
         document.body.style.background = g.bg_value || '#000000';
         document.body.style.backgroundImage = '';
         document.body.style.backgroundSize = '';
-        document.querySelectorAll('.page').forEach(p => {
-            p.style.background = 'rgba(255,255,255,0.05)';
-            p.style.backdropFilter = 'blur(10px)';
-        });
         const vid = document.getElementById('bgVideo');
         if (vid) vid.remove();
     } else if (g.bg_type === 'image') {
@@ -169,10 +199,6 @@ function applySettings() {
             document.body.style.backgroundSize = 'cover';
             document.body.style.backgroundPosition = 'center';
         }
-        document.querySelectorAll('.page').forEach(p => {
-            p.style.background = 'rgba(255,255,255,0.1)';
-            p.style.backdropFilter = 'blur(15px)';
-        });
         const vid = document.getElementById('bgVideo');
         if (vid) vid.remove();
     } else if (g.bg_type === 'video') {
@@ -196,10 +222,6 @@ function applySettings() {
             video.src = g.bg_value;
             video.play().catch(() => {});
         }
-        document.querySelectorAll('.page').forEach(p => {
-            p.style.background = 'rgba(0,0,0,0.2)';
-            p.style.backdropFilter = 'blur(10px)';
-        });
     }
     const blur = g.blur || 0;
     document.body.style.backdropFilter = `blur(${blur}px)`;
@@ -303,16 +325,17 @@ function toggleFullscreen() {
     }
 }
 
-// ---------- Grid Settings (simplified) ----------
+// ---------- Grid Settings (with export/import) ----------
 function initGridSettings() {
     const modal = document.getElementById('gridSettingsModal');
     const close = document.getElementById('closeSettings');
     const save = document.getElementById('saveSettingsBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const importFileInput = document.getElementById('importFileInput');
 
     window.openGridSettings = function() {
         const g = settings.grid || {};
-        document.getElementById('gridCols').value = g.cols || 2;
-        document.getElementById('gridRows').value = g.rows || 6;
         document.getElementById('iconSize').value = g.icon_size || 64;
         document.getElementById('iconSizeVal').textContent = g.icon_size || 64;
         document.getElementById('glowSize').value = g.glow_size || 20;
@@ -358,8 +381,6 @@ function initGridSettings() {
     });
 
     save.addEventListener('click', async () => {
-        const cols = parseInt(document.getElementById('gridCols').value) || 2;
-        const rows = parseInt(document.getElementById('gridRows').value) || 6;
         const iconSize = parseInt(document.getElementById('iconSize').value) || 64;
         const glowSize = parseInt(document.getElementById('glowSize').value) || 20;
         const blur = parseFloat(document.getElementById('bgBlur').value) || 0;
@@ -370,7 +391,7 @@ function initGridSettings() {
         
         if (bgType === 'color') {
             bgValue = document.getElementById('bgColor').value;
-            await saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType, bgValue);
+            await saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue);
             modal.style.display = 'none';
         } else {
             const fileInput = document.getElementById('bgFile');
@@ -383,7 +404,7 @@ function initGridSettings() {
                 const reader = new FileReader();
                 reader.onload = async function(e) {
                     bgValue = e.target.result;
-                    await saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType, bgValue);
+                    await saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue);
                     modal.style.display = 'none';
                 };
                 reader.onerror = function() {
@@ -392,18 +413,64 @@ function initGridSettings() {
                 reader.readAsDataURL(file);
             } else {
                 bgValue = settings.grid?.bg_value || '';
-                await saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType, bgValue);
+                await saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue);
                 modal.style.display = 'none';
             }
         }
     });
+
+    // Export
+    exportBtn.addEventListener('click', async () => {
+        try {
+            const res = await fetch('/api/export');
+            const data = await res.json();
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'WinLauncher_Config.sb';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            alert('Export failed: ' + e.message);
+        }
+    });
+
+    // Import
+    importBtn.addEventListener('click', () => {
+        importFileInput.click();
+    });
+    importFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            const res = await fetch('/api/import', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            if (res.ok) {
+                alert('Import successful! Reloading...');
+                location.reload();
+            } else {
+                alert('Import failed: ' + (await res.text()));
+            }
+        } catch (err) {
+            alert('Invalid file: ' + err.message);
+        }
+        importFileInput.value = '';
+    });
 }
 
-async function saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType, bgValue) {
+async function saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue) {
     const newSettings = {
         grid: {
-            cols: cols,
-            rows: rows,
+            cols: 2,  // fixed
+            rows: 6,  // fixed
             icon_size: iconSize,
             glow_size: glowSize,
             blur: blur,
@@ -415,7 +482,7 @@ async function saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType
     saveSettingsToLocal(newSettings);
     settings = newSettings;
     applySettings();
-    renderPages(appsData);
+    // No need to re-render pages for size changes (they use CSS variables)
     
     try {
         const res = await fetch('/api/settings', {
@@ -424,10 +491,8 @@ async function saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType
             body: JSON.stringify(newSettings)
         });
         if (res.ok) {
-            document.getElementById('settingsMsg').textContent = '✅ Settings saved successfully!';
-            setTimeout(() => {
-                document.getElementById('settingsMsg').textContent = '';
-            }, 2000);
+            document.getElementById('settingsMsg').textContent = '✅ Settings saved!';
+            setTimeout(() => document.getElementById('settingsMsg').textContent = '', 2000);
         } else {
             document.getElementById('settingsMsg').textContent = '⚠️ Server save failed, but local cache updated';
         }
@@ -437,32 +502,82 @@ async function saveSettingsToServer(cols, rows, iconSize, glowSize, blur, bgType
     }
 }
 
-// ---------- Edit View ----------
+// ---------- Edit View with Pages ----------
 function initEditView() {
     const closeEdit = document.getElementById('closeEdit');
+    const addPageBtn = document.getElementById('addPageBtn');
     const addMoreBtn = document.getElementById('addMoreBtn');
 
     closeEdit.addEventListener('click', closeEditView);
+    addPageBtn.addEventListener('click', addNewPage);
     addMoreBtn.addEventListener('click', () => openModal(null));
 }
 
 function openEditView() {
     document.getElementById('editView').style.display = 'flex';
-    renderEditList(appsData);
+    renderPageTabs();
+    // Select first page by default
+    if (pagesData.length > 0) {
+        currentEditPageId = pagesData[0].id;
+        renderEditList(pagesData[0]);
+    }
 }
 
 function closeEditView() {
     document.getElementById('editView').style.display = 'none';
 }
 
-function renderEditList(apps) {
+function renderPageTabs() {
+    const tabsContainer = document.getElementById('pageTabs');
+    tabsContainer.innerHTML = '';
+    pagesData.forEach((page, index) => {
+        const tab = document.createElement('div');
+        tab.className = 'page-tab' + (page.id === currentEditPageId ? ' active' : '');
+        tab.textContent = page.name || 'Page';
+        tab.dataset.pageId = page.id;
+        tab.addEventListener('click', () => {
+            currentEditPageId = page.id;
+            renderPageTabs();
+            renderEditList(page);
+        });
+        // Rename on double-click
+        tab.addEventListener('dblclick', () => {
+            const newName = prompt('Enter new page name:', page.name);
+            if (newName && newName.trim() !== '') {
+                renamePage(page.id, newName.trim());
+            }
+        });
+        // Delete page (except if only one page)
+        if (pagesData.length > 1) {
+            const del = document.createElement('span');
+            del.className = 'page-tab-delete';
+            del.textContent = '✕';
+            del.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm(`Delete page "${page.name}"?`)) {
+                    deletePage(page.id);
+                }
+            });
+            tab.appendChild(del);
+        }
+        tabsContainer.appendChild(tab);
+    });
+    // Add tab for new page is handled by button
+}
+
+function renderEditList(page) {
     const list = document.getElementById('editList');
     list.innerHTML = '';
-    apps.forEach((app, index) => {
+    if (!page) return;
+    const appIds = page.appIds || [];
+    appIds.forEach((appId, index) => {
+        const app = appsData.find(a => a.id === appId);
+        if (!app) return;
         const item = document.createElement('div');
         item.className = 'edit-item';
         item.draggable = true;
-        item.dataset.id = app.id;
+        item.dataset.appId = app.id;
+        item.dataset.pageId = page.id;
         item.dataset.index = index;
 
         const handle = document.createElement('span');
@@ -507,9 +622,9 @@ function renderEditList(apps) {
         actions.appendChild(delBtn);
         item.appendChild(actions);
 
-        // Drag events for edit list (only here)
+        // Drag and drop within and between pages
         item.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('text/plain', app.id);
+            e.dataTransfer.setData('text/plain', JSON.stringify({appId: app.id, fromPageId: page.id, index: index}));
             item.classList.add('dragging');
         });
         item.addEventListener('dragend', () => {
@@ -521,7 +636,9 @@ function renderEditList(apps) {
             if (!draggingItem) return;
             const rect = item.getBoundingClientRect();
             const midY = rect.top + rect.height / 2;
-            if (e.clientY < midY) {
+            // Determine drop position
+            let insertBefore = e.clientY < midY;
+            if (insertBefore) {
                 list.insertBefore(draggingItem, item);
             } else {
                 list.insertBefore(draggingItem, item.nextSibling);
@@ -529,36 +646,134 @@ function renderEditList(apps) {
         });
         item.addEventListener('drop', (e) => {
             e.preventDefault();
-            const draggedId = e.dataTransfer.getData('text/plain');
-            const items = list.querySelectorAll('.edit-item');
-            const newOrder = Array.from(items).map(el => el.dataset.id);
-            const newApps = newOrder.map(id => appsData.find(a => a.id === id));
-            appsData = newApps;
-            saveOrder(appsData);
-            renderEditList(appsData);
+            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+            const fromPageId = data.fromPageId;
+            const appId = data.appId;
+            const fromIndex = data.index;
+            // Determine new position
+            const items = list.querySelectorAll('.edit-item:not(.dragging)');
+            let newIndex = 0;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i] === item) {
+                    newIndex = i;
+                    break;
+                }
+            }
+            // Determine target page (the current page we are editing)
+            const targetPageId = currentEditPageId;
+            moveApp(appId, fromPageId, targetPageId, fromIndex, newIndex);
         });
 
         list.appendChild(item);
     });
 }
 
-async function saveOrder(apps) {
-    const order = apps.map(a => a.id);
-    await fetch('/api/reorder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order })
-    });
-    renderPages(appsData);
+// ---------- Page CRUD ----------
+async function addNewPage() {
+    const name = prompt('Enter page name:', 'New Page');
+    if (!name || name.trim() === '') return;
+    try {
+        const res = await fetch('/api/pages', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name.trim()})
+        });
+        if (res.ok) {
+            const data = await res.json();
+            pagesData.push(data.page);
+            renderPageTabs();
+            // Select new page
+            currentEditPageId = data.page.id;
+            renderPageTabs();
+            renderEditList(data.page);
+        }
+    } catch (e) {
+        alert('Failed to add page');
+    }
 }
 
-async function deleteApp(id) {
-    if (!confirm('Remove this shortcut?')) return;
-    await fetch(`/api/apps/${id}`, { method: 'DELETE' });
-    await fetchApps();
-    if (document.getElementById('editView').style.display === 'flex') {
-        renderEditList(appsData);
+async function renamePage(pageId, newName) {
+    try {
+        await fetch(`/api/pages/${pageId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: newName})
+        });
+        const page = pagesData.find(p => p.id === pageId);
+        if (page) page.name = newName;
+        renderPageTabs();
+        // Re-render main pages
+        renderPages();
+    } catch (e) {}
+}
+
+async function deletePage(pageId) {
+    try {
+        await fetch(`/api/pages/${pageId}`, {method: 'DELETE'});
+        pagesData = pagesData.filter(p => p.id !== pageId);
+        if (currentEditPageId === pageId) {
+            currentEditPageId = pagesData.length > 0 ? pagesData[0].id : null;
+        }
+        renderPageTabs();
+        if (currentEditPageId) {
+            const page = pagesData.find(p => p.id === currentEditPageId);
+            renderEditList(page);
+        } else {
+            document.getElementById('editList').innerHTML = '';
+        }
+        renderPages();
+    } catch (e) {}
+}
+
+// ---------- Move App between pages ----------
+async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
+    try {
+        await fetch('/api/pages/move-app', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({appId, fromPageId, toPageId, fromIndex, toIndex})
+        });
+        // Update local data
+        if (fromPageId === toPageId) {
+            // Reorder within same page
+            const page = pagesData.find(p => p.id === fromPageId);
+            if (page) {
+                const appIds = page.appIds;
+                const [removed] = appIds.splice(fromIndex, 1);
+                appIds.splice(toIndex, 0, removed);
+            }
+        } else {
+            // Move between pages
+            const fromPage = pagesData.find(p => p.id === fromPageId);
+            const toPage = pagesData.find(p => p.id === toPageId);
+            if (fromPage && toPage) {
+                const [removed] = fromPage.appIds.splice(fromIndex, 1);
+                toPage.appIds.splice(toIndex, 0, removed);
+            }
+        }
+        // Re-render edit list for current page
+        const currentPage = pagesData.find(p => p.id === currentEditPageId);
+        renderEditList(currentPage);
+        renderPages();
+    } catch (e) {
+        alert('Failed to move app');
     }
+}
+
+// ---------- Delete App ----------
+async function deleteApp(appId) {
+    if (!confirm('Remove this shortcut?')) return;
+    await fetch(`/api/apps/${appId}`, { method: 'DELETE' });
+    // Remove from local apps
+    appsData = appsData.filter(a => a.id !== appId);
+    // Remove from pages
+    for (let page of pagesData) {
+        page.appIds = page.appIds.filter(id => id !== appId);
+    }
+    // Re-render edit list and main pages
+    const currentPage = pagesData.find(p => p.id === currentEditPageId);
+    renderEditList(currentPage);
+    renderPages();
 }
 
 // ---------- Add/Edit Modal ----------
@@ -662,10 +877,15 @@ async function saveApp() {
             body: formData
         });
         if (res.ok) {
+            const data = await res.json();
             closeModalFn();
-            await fetchApps();
+            // Reload apps and pages
+            await fetchAppsAndPages();
+            // Refresh edit view
             if (document.getElementById('editView').style.display === 'flex') {
-                renderEditList(appsData);
+                renderPageTabs();
+                const currentPage = pagesData.find(p => p.id === currentEditPageId);
+                renderEditList(currentPage);
             }
         } else {
             const err = await res.json();
@@ -676,15 +896,14 @@ async function saveApp() {
     }
 }
 
-// ---------- Orientation Change (preserve current page) ----------
+// ---------- Orientation Change ----------
 function setupOrientationChange() {
     let resizeTimer;
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
             const currentPageBefore = currentPage;
-            renderPages(appsData);
-            // Restore page
+            renderPages();
             const container = document.getElementById('appContainer');
             const pages = container.querySelectorAll('.page');
             if (pages.length > 0) {
