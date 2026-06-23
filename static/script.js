@@ -87,7 +87,7 @@ function renderPages() {
         
         const name = page.name || '';
         const isDefaultName = /^Page \d+$/.test(name);
-        const showPill = !isDefaultName && name.trim() !== '' && name !== 'System Tools';
+        const showPill = !isDefaultName && name.trim() !== '' && name !== 'System Tools' && name !== 'Windows Applications';
         
         if (showPill) {
             const namePill = document.createElement('div');
@@ -140,6 +140,9 @@ function createAppCard(app) {
             openEditView();
         } else if (app.id === 'grid_settings') {
             openGridSettings();
+        } else if (app.id === 'restore_windows_apps') {
+            // Trigger restore and reload
+            launchApp(app.id);
         } else {
             launchApp(app.id);
         }
@@ -309,8 +312,29 @@ async function launchApp(id) {
         if (data.status === 'system') {
             if (data.action === 'edit') openEditView();
             else if (data.action === 'settings') openGridSettings();
+            else if (data.action === 'restore_windows') {
+                // Restore completed, reload data
+                alert(`Windows Apps restored! ${data.count} new apps added.`);
+                await fetchAppsAndPages();
+                if (document.getElementById('editView').style.display === 'flex') {
+                    renderPageTabs();
+                    const currentPage = pagesData.find(p => p.id === currentEditPageId);
+                    renderEditList(currentPage);
+                }
+            }
+        } else if (data.status === 'restored') {
+            // For restore action
+            alert(`Windows Apps restored! ${data.count} new apps added.`);
+            await fetchAppsAndPages();
+            if (document.getElementById('editView').style.display === 'flex') {
+                renderPageTabs();
+                const currentPage = pagesData.find(p => p.id === currentEditPageId);
+                renderEditList(currentPage);
+            }
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error('Launch error:', e);
+    }
 }
 
 // ---------- Fullscreen ----------
@@ -428,7 +452,6 @@ function initGridSettings() {
         try {
             const res = await fetch('/api/export');
             const data = await res.json();
-            // Include wallpaper file if any? The data already includes bg_value as data URL.
             const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -520,8 +543,8 @@ function initEditView() {
     editPageNameBtn.addEventListener('click', () => {
         if (!currentEditPageId) return;
         const page = pagesData.find(p => p.id === currentEditPageId);
-        if (!page || page.name === 'System Tools') {
-            alert('Cannot rename system page');
+        if (!page || page.type === 'system' || page.type === 'windows_apps') {
+            alert('Cannot rename special page');
             return;
         }
         const newName = prompt('Enter new page name:', page.name);
@@ -529,7 +552,15 @@ function initEditView() {
             renamePage(currentEditPageId, newName.trim());
         }
     });
-    addMoreBtn.addEventListener('click', () => openModal(null));
+    addMoreBtn.addEventListener('click', () => {
+        const page = pagesData.find(p => p.id === currentEditPageId);
+        if (!page) return;
+        if (page.type === 'windows_apps' || page.type === 'system') {
+            alert('Cannot add shortcuts to this page');
+            return;
+        }
+        openModal(null);
+    });
 }
 
 function openEditView() {
@@ -549,18 +580,20 @@ function renderPageTabs() {
     const tabsContainer = document.getElementById('pageTabs');
     tabsContainer.innerHTML = '';
     pagesData.forEach((page, index) => {
-        const isSystem = page.name === 'System Tools';
+        const isSystem = page.type === 'system';
+        const isWindows = page.type === 'windows_apps';
         const tab = document.createElement('div');
         tab.className = 'page-tab' + (page.id === currentEditPageId ? ' active' : '');
         tab.textContent = page.name || 'Page';
         tab.dataset.pageId = page.id;
-        tab.draggable = !isSystem;
+        tab.draggable = !isSystem && !isWindows;
         tab.addEventListener('click', () => {
             currentEditPageId = page.id;
             renderPageTabs();
             renderEditList(page);
         });
-        if (!isSystem) {
+        // Double-click to rename (only normal pages)
+        if (!isSystem && !isWindows) {
             tab.addEventListener('dblclick', () => {
                 const newName = prompt('Enter new page name:', page.name);
                 if (newName && newName.trim() !== '') {
@@ -568,19 +601,24 @@ function renderPageTabs() {
                 }
             });
         }
+        // Delete page (except system and windows pages)
         if (!isSystem && pagesData.length > 1) {
             const del = document.createElement('span');
             del.className = 'page-tab-delete';
             del.textContent = '✕';
             del.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (confirm(`Delete page "${page.name}"?`)) {
-                    deletePage(page.id);
+                if (isWindows) {
+                    // Deleting windows page will remove all windows apps from config
+                    if (!confirm(`Delete the entire "${page.name}" page? This will remove all Windows apps from the launcher (you can restore them later).`)) return;
+                } else {
+                    if (!confirm(`Delete page "${page.name}"?`)) return;
                 }
+                deletePage(page.id);
             });
             tab.appendChild(del);
         }
-        if (!isSystem) {
+        if (!isSystem && !isWindows) {
             tab.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('text/plain', page.id);
                 tab.classList.add('dragging');
@@ -636,15 +674,21 @@ function renderEditList(page) {
     const list = document.getElementById('editList');
     list.innerHTML = '';
     if (!page) return;
+    const isWindowsPage = page.type === 'windows_apps';
+    const isSystemPage = page.type === 'system';
     const appIds = page.appIds || [];
     appIds.forEach((appId, index) => {
         const app = appsData.find(a => a.id === appId);
         if (!app) return;
-        const isSystem = app.id === 'edit_shortcuts' || app.id === 'grid_settings';
+        const isSystemApp = app.is_system || false;
+        const isWindowsApp = app.is_windows_app || false;
         const item = document.createElement('div');
         item.className = 'edit-item';
-        if (!isSystem) {
+        // Draggable only if not system/windows page and not system/windows app
+        if (!isSystemPage && !isWindowsPage && !isSystemApp && !isWindowsApp) {
             item.draggable = true;
+        } else {
+            item.draggable = false;
         }
         item.dataset.appId = app.id;
         item.dataset.pageId = page.id;
@@ -652,7 +696,7 @@ function renderEditList(page) {
 
         const handle = document.createElement('span');
         handle.className = 'drag-handle';
-        handle.textContent = isSystem ? '🔒' : '☰';
+        handle.textContent = (isSystemApp || isWindowsApp) ? '🔒' : '☰';
         item.appendChild(handle);
 
         const iconDiv = document.createElement('div');
@@ -679,6 +723,10 @@ function renderEditList(page) {
         editBtn.textContent = '✏️';
         editBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (isSystemApp || isWindowsApp || isWindowsPage || isSystemPage) {
+                alert('Cannot edit this shortcut');
+                return;
+            }
             openModal(app.id);
         });
         const delBtn = document.createElement('button');
@@ -686,17 +734,28 @@ function renderEditList(page) {
         delBtn.textContent = '✕';
         delBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (isSystem) {
+            if (isSystemApp || isSystemPage) {
                 alert('Cannot delete system shortcut');
                 return;
             }
+            // Allow deletion of windows apps and normal apps
+            if (!confirm(`Remove "${app.name}"?`)) return;
             deleteApp(app.id);
         });
+        // Hide edit button for system/windows apps
+        if (isSystemApp || isWindowsApp || isWindowsPage) {
+            editBtn.style.display = 'none';
+        }
+        // Delete button visible for all except system apps
+        if (isSystemApp || isSystemPage) {
+            delBtn.style.display = 'none';
+        }
         actions.appendChild(editBtn);
         actions.appendChild(delBtn);
         item.appendChild(actions);
 
-        if (!isSystem) {
+        // Drag events
+        if (item.draggable) {
             item.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('text/plain', JSON.stringify({appId: app.id, fromPageId: page.id, index: index}));
                 item.classList.add('dragging');
@@ -742,6 +801,10 @@ function renderEditList(page) {
 async function addNewPage() {
     const name = prompt('Enter page name:', 'New Page');
     if (!name || name.trim() === '') return;
+    if (name === 'System Tools' || name === 'Windows Applications') {
+        alert('Reserved page name');
+        return;
+    }
     try {
         const res = await fetch('/api/pages', {
             method: 'POST',
@@ -825,19 +888,19 @@ async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
 }
 
 async function deleteApp(appId) {
-    if (appId === 'edit_shortcuts' || appId === 'grid_settings') {
-        alert('Cannot delete system shortcut');
-        return;
+    try {
+        await fetch(`/api/apps/${appId}`, { method: 'DELETE' });
+        // Remove from local data
+        appsData = appsData.filter(a => a.id !== appId);
+        for (let page of pagesData) {
+            page.appIds = page.appIds.filter(id => id !== appId);
+        }
+        const currentPage = pagesData.find(p => p.id === currentEditPageId);
+        renderEditList(currentPage);
+        renderPages();
+    } catch (e) {
+        alert('Failed to delete app');
     }
-    if (!confirm('Remove this shortcut?')) return;
-    await fetch(`/api/apps/${appId}`, { method: 'DELETE' });
-    appsData = appsData.filter(a => a.id !== appId);
-    for (let page of pagesData) {
-        page.appIds = page.appIds.filter(id => id !== appId);
-    }
-    const currentPage = pagesData.find(p => p.id === currentEditPageId);
-    renderEditList(currentPage);
-    renderPages();
 }
 
 // ---------- Add/Edit Modal ----------
