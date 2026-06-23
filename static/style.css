@@ -33,6 +33,7 @@ body {
 }
 .app-container::-webkit-scrollbar { display: none; }
 
+/* Page – flex column, centered, with padding */
 .page {
     flex: 0 0 100%;
     height: 100%;
@@ -41,17 +42,19 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 100px 100px 100px 100px;
+    padding: 80px 60px 80px 60px;
     position: relative;
 }
 
+/* Extra top padding when pill is shown */
 .page.has-pill {
-    padding-top: 140px;
+    padding-top: 120px;
 }
 
+/* Page name pill – centered at top, never overlaps */
 .page-name-pill {
     position: absolute;
-    top: 100px;
+    top: 30px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(255,255,255,0.15);
@@ -74,17 +77,19 @@ body {
     pointer-events: none;
 }
 
+/* Grid – centered, uses CSS variables for gap and icon size */
 .page-grid {
     display: grid;
     gap: var(--gap-size, 16px);
     width: 100%;
     max-width: 600px;
-    height: 100%;
     justify-items: center;
     align-content: center;
-    margin: 0 auto;
+    margin: 0 auto;  /* ← this keeps it centered */
+    height: 100%;
 }
 
+/* 3D Glass Button – square, uniform border */
 .app-card.glass-button {
     display: flex;
     flex-direction: column;
@@ -160,6 +165,7 @@ body {
 }
 .app-card .name:empty { display: none; }
 
+/* Page indicators – centered */
 .page-indicators {
     position: absolute;
     bottom: 20px;
@@ -444,6 +450,21 @@ body {
 }
 .glass-btn:hover { transform:scale(1.03); background:rgba(255,255,255,0.25); }
 .glass-btn.primary { background:rgba(0,122,255,0.8); border-color:rgba(0,122,255,0.9); }
+
+/* ---------- Landscape adjustments ---------- */
+@media (orientation: landscape) {
+    .page {
+        padding: 40px 60px 40px 60px;
+    }
+    .page.has-pill {
+        padding-top: 70px;
+    }
+    .page-name-pill {
+        top: 15px;
+        font-size: 1rem;
+        padding: 4px 16px;
+    }
+}
 
 @media (max-width: 500px) {
     .fullscreen-btn { top:10px; right:10px; font-size:1rem; padding:4px 10px; }
