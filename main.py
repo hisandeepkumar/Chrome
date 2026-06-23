@@ -6,7 +6,8 @@ import os
 import subprocess
 import uuid
 import re
-from flask import Flask, request, render_template, jsonify, send_from_directory, send_file
+import base64
+from flask import Flask, request, render_template, jsonify, send_from_directory
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
@@ -446,17 +447,41 @@ def save_settings():
     save_config(config_data)
     return jsonify({"status": "ok"})
 
-# ---------- Export / Import ----------
+# ---------- Export / Import (with icons) ----------
 @app.route('/api/export', methods=['GET'])
 def export_config():
-    # Return full config (already includes wallpaper data URLs)
-    return jsonify(config_data)
+    # Copy config_data
+    export_data = config_data.copy()
+    # Add icons as base64
+    icons = {}
+    for app in config_data['apps']:
+        app_id = app['id']
+        icon_path = os.path.join(ICON_DIR, f'{app_id}.png')
+        if os.path.exists(icon_path):
+            with open(icon_path, 'rb') as f:
+                icon_data = base64.b64encode(f.read()).decode('utf-8')
+                icons[app_id] = icon_data
+    export_data['icons'] = icons
+    return jsonify(export_data)
 
 @app.route('/api/import', methods=['POST'])
 def import_config():
     imported = request.json
     if not imported or 'apps' not in imported or 'pages' not in imported or 'settings' not in imported:
         return jsonify({"status": "error", "msg": "Invalid data"}), 400
+    
+    # Restore icons
+    if 'icons' in imported:
+        for app_id, icon_base64 in imported['icons'].items():
+            icon_path = os.path.join(ICON_DIR, f'{app_id}.png')
+            try:
+                icon_data = base64.b64decode(icon_base64)
+                with open(icon_path, 'wb') as f:
+                    f.write(icon_data)
+            except:
+                pass  # ignore if invalid
+    # Remove icons from data before saving (we don't need to store them)
+    imported.pop('icons', None)
     global config_data
     config_data = imported
     save_config(config_data)
