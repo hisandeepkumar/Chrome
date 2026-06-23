@@ -85,11 +85,20 @@ function renderPages() {
         pageDiv.className = 'page';
         pageDiv.dataset.pageIndex = idx;
         
-        // Page name pill
-        const namePill = document.createElement('div');
-        namePill.className = 'page-name-pill';
-        namePill.textContent = page.name || 'Page';
-        pageDiv.appendChild(namePill);
+        // Determine if we should show the page name pill
+        const name = page.name || '';
+        const isDefaultName = /^Page \d+$/.test(name);
+        const showPill = !isDefaultName && name.trim() !== '';
+        
+        if (showPill) {
+            const namePill = document.createElement('div');
+            namePill.className = 'page-name-pill';
+            namePill.textContent = name;
+            pageDiv.appendChild(namePill);
+            pageDiv.classList.add('has-pill');
+        } else {
+            pageDiv.classList.remove('has-pill');
+        }
         
         // Grid container
         const gridDiv = document.createElement('div');
@@ -98,7 +107,6 @@ function renderPages() {
         gridDiv.style.gridTemplateRows = `repeat(${rows}, auto)`;
         gridDiv.style.gap = '16px';
         gridDiv.style.width = '100%';
-        gridDiv.style.height = '100%';
         gridDiv.style.justifyItems = 'center';
         gridDiv.style.alignContent = 'center';
         
@@ -455,8 +463,8 @@ function initGridSettings() {
 async function saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue) {
     const newSettings = {
         grid: {
-            cols: 2,  // fixed
-            rows: 6,  // fixed
+            cols: 2,
+            rows: 6,
             icon_size: iconSize,
             glow_size: glowSize,
             blur: blur,
@@ -468,7 +476,6 @@ async function saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue) {
     saveSettingsToLocal(newSettings);
     settings = newSettings;
     applySettings();
-    // No need to re-render pages for size changes (CSS variables)
     
     try {
         const res = await fetch('/api/settings', {
@@ -571,7 +578,6 @@ function renderPageTabs() {
             e.preventDefault();
             const draggedId = e.dataTransfer.getData('text/plain');
             if (draggedId === page.id) return;
-            // Reorder pagesData based on new DOM order
             const tabs = tabsContainer.querySelectorAll('.page-tab');
             const newOrder = Array.from(tabs).map(el => el.dataset.pageId);
             reorderPages(newOrder);
@@ -587,13 +593,10 @@ async function reorderPages(newOrder) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({order: newOrder})
         });
-        // Update local data
         const pageMap = {};
         pagesData.forEach(p => pageMap[p.id] = p);
         pagesData = newOrder.map(id => pageMap[id]);
-        // Re-render main pages
         renderPages();
-        // Re-render tabs (keeping current selection)
         renderPageTabs();
         const currentPage = pagesData.find(p => p.id === currentEditPageId);
         if (currentPage) renderEditList(currentPage);
@@ -685,7 +688,6 @@ function renderEditList(page) {
             const fromPageId = data.fromPageId;
             const appId = data.appId;
             const fromIndex = data.index;
-            // Determine new position
             const items = list.querySelectorAll('.edit-item:not(.dragging)');
             let newIndex = 0;
             for (let i = 0; i < items.length; i++) {
@@ -766,7 +768,6 @@ async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({appId, fromPageId, toPageId, fromIndex, toIndex})
         });
-        // Update local data
         if (fromPageId === toPageId) {
             const page = pagesData.find(p => p.id === fromPageId);
             if (page) {
@@ -906,7 +907,6 @@ async function saveApp() {
         if (res.ok) {
             const data = await res.json();
             closeModalFn();
-            // Reload apps and pages
             await fetchAppsAndPages();
             if (document.getElementById('editView').style.display === 'flex') {
                 renderPageTabs();
