@@ -14,9 +14,9 @@ let appsData = [];
 let pagesData = [];
 let settings = {};
 let currentPage = 0;
-let currentEditPageId = null; // which page is being edited
+let currentEditPageId = null;
 
-// ---------- LocalStorage Management ----------
+// ---------- LocalStorage ----------
 function saveSettingsToLocal(settingsObj) {
     try {
         localStorage.setItem('winlauncher_settings', JSON.stringify(settingsObj));
@@ -84,8 +84,6 @@ function renderPages() {
         const pageDiv = document.createElement('div');
         pageDiv.className = 'page';
         pageDiv.dataset.pageIndex = idx;
-        pageDiv.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-        pageDiv.style.gridTemplateRows = `repeat(${rows}, auto)`;
         
         // Page name pill
         const namePill = document.createElement('div');
@@ -93,11 +91,16 @@ function renderPages() {
         namePill.textContent = page.name || 'Page';
         pageDiv.appendChild(namePill);
         
-        // Apps grid
+        // Grid container
         const gridDiv = document.createElement('div');
         gridDiv.className = 'page-grid';
         gridDiv.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
         gridDiv.style.gridTemplateRows = `repeat(${rows}, auto)`;
+        gridDiv.style.gap = '16px';
+        gridDiv.style.width = '100%';
+        gridDiv.style.height = '100%';
+        gridDiv.style.justifyItems = 'center';
+        gridDiv.style.alignContent = 'center';
         
         const appIds = page.appIds || [];
         appIds.forEach(appId => {
@@ -142,24 +145,7 @@ function createAppCard(app) {
     return card;
 }
 
-function getCols() {
-    // always return the fixed values (no user change)
-    return 2; // portrait cols
-}
-
-function getRows() {
-    return 6; // portrait rows
-}
-
-function getColsLandscape() {
-    return 6; // swapped
-}
-
-function getRowsLandscape() {
-    return 2;
-}
-
-// Override getCols/getRows to swap on landscape
+// ---------- Fixed cols/rows with swap on landscape ----------
 function getCols() {
     const isLandscape = window.innerWidth > window.innerHeight;
     return isLandscape ? 6 : 2;
@@ -325,7 +311,7 @@ function toggleFullscreen() {
     }
 }
 
-// ---------- Grid Settings (with export/import) ----------
+// ---------- Grid Settings (no cols/rows) ----------
 function initGridSettings() {
     const modal = document.getElementById('gridSettingsModal');
     const close = document.getElementById('closeSettings');
@@ -482,7 +468,7 @@ async function saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue) {
     saveSettingsToLocal(newSettings);
     settings = newSettings;
     applySettings();
-    // No need to re-render pages for size changes (they use CSS variables)
+    // No need to re-render pages for size changes (CSS variables)
     
     try {
         const res = await fetch('/api/settings', {
@@ -516,7 +502,6 @@ function initEditView() {
 function openEditView() {
     document.getElementById('editView').style.display = 'flex';
     renderPageTabs();
-    // Select first page by default
     if (pagesData.length > 0) {
         currentEditPageId = pagesData[0].id;
         renderEditList(pagesData[0]);
@@ -527,6 +512,7 @@ function closeEditView() {
     document.getElementById('editView').style.display = 'none';
 }
 
+// ---------- Page Tabs with drag reorder ----------
 function renderPageTabs() {
     const tabsContainer = document.getElementById('pageTabs');
     tabsContainer.innerHTML = '';
@@ -535,12 +521,13 @@ function renderPageTabs() {
         tab.className = 'page-tab' + (page.id === currentEditPageId ? ' active' : '');
         tab.textContent = page.name || 'Page';
         tab.dataset.pageId = page.id;
+        tab.draggable = true;
         tab.addEventListener('click', () => {
             currentEditPageId = page.id;
             renderPageTabs();
             renderEditList(page);
         });
-        // Rename on double-click
+        // Double-click to rename
         tab.addEventListener('dblclick', () => {
             const newName = prompt('Enter new page name:', page.name);
             if (newName && newName.trim() !== '') {
@@ -560,9 +547,59 @@ function renderPageTabs() {
             });
             tab.appendChild(del);
         }
+        // Drag events for reordering pages
+        tab.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', page.id);
+            tab.classList.add('dragging');
+        });
+        tab.addEventListener('dragend', () => {
+            tab.classList.remove('dragging');
+        });
+        tab.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            const draggingTab = document.querySelector('.page-tab.dragging');
+            if (!draggingTab) return;
+            const rect = tab.getBoundingClientRect();
+            const midX = rect.left + rect.width / 2;
+            if (e.clientX < midX) {
+                tabsContainer.insertBefore(draggingTab, tab);
+            } else {
+                tabsContainer.insertBefore(draggingTab, tab.nextSibling);
+            }
+        });
+        tab.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const draggedId = e.dataTransfer.getData('text/plain');
+            if (draggedId === page.id) return;
+            // Reorder pagesData based on new DOM order
+            const tabs = tabsContainer.querySelectorAll('.page-tab');
+            const newOrder = Array.from(tabs).map(el => el.dataset.pageId);
+            reorderPages(newOrder);
+        });
         tabsContainer.appendChild(tab);
     });
-    // Add tab for new page is handled by button
+}
+
+async function reorderPages(newOrder) {
+    try {
+        await fetch('/api/pages/reorder', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({order: newOrder})
+        });
+        // Update local data
+        const pageMap = {};
+        pagesData.forEach(p => pageMap[p.id] = p);
+        pagesData = newOrder.map(id => pageMap[id]);
+        // Re-render main pages
+        renderPages();
+        // Re-render tabs (keeping current selection)
+        renderPageTabs();
+        const currentPage = pagesData.find(p => p.id === currentEditPageId);
+        if (currentPage) renderEditList(currentPage);
+    } catch (e) {
+        alert('Failed to reorder pages');
+    }
 }
 
 function renderEditList(page) {
@@ -622,7 +659,7 @@ function renderEditList(page) {
         actions.appendChild(delBtn);
         item.appendChild(actions);
 
-        // Drag and drop within and between pages
+        // Drag within/between pages
         item.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/plain', JSON.stringify({appId: app.id, fromPageId: page.id, index: index}));
             item.classList.add('dragging');
@@ -636,9 +673,7 @@ function renderEditList(page) {
             if (!draggingItem) return;
             const rect = item.getBoundingClientRect();
             const midY = rect.top + rect.height / 2;
-            // Determine drop position
-            let insertBefore = e.clientY < midY;
-            if (insertBefore) {
+            if (e.clientY < midY) {
                 list.insertBefore(draggingItem, item);
             } else {
                 list.insertBefore(draggingItem, item.nextSibling);
@@ -659,7 +694,6 @@ function renderEditList(page) {
                     break;
                 }
             }
-            // Determine target page (the current page we are editing)
             const targetPageId = currentEditPageId;
             moveApp(appId, fromPageId, targetPageId, fromIndex, newIndex);
         });
@@ -682,10 +716,10 @@ async function addNewPage() {
             const data = await res.json();
             pagesData.push(data.page);
             renderPageTabs();
-            // Select new page
             currentEditPageId = data.page.id;
             renderPageTabs();
             renderEditList(data.page);
+            renderPages();
         }
     } catch (e) {
         alert('Failed to add page');
@@ -702,7 +736,6 @@ async function renamePage(pageId, newName) {
         const page = pagesData.find(p => p.id === pageId);
         if (page) page.name = newName;
         renderPageTabs();
-        // Re-render main pages
         renderPages();
     } catch (e) {}
 }
@@ -735,7 +768,6 @@ async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
         });
         // Update local data
         if (fromPageId === toPageId) {
-            // Reorder within same page
             const page = pagesData.find(p => p.id === fromPageId);
             if (page) {
                 const appIds = page.appIds;
@@ -743,7 +775,6 @@ async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
                 appIds.splice(toIndex, 0, removed);
             }
         } else {
-            // Move between pages
             const fromPage = pagesData.find(p => p.id === fromPageId);
             const toPage = pagesData.find(p => p.id === toPageId);
             if (fromPage && toPage) {
@@ -751,7 +782,6 @@ async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
                 toPage.appIds.splice(toIndex, 0, removed);
             }
         }
-        // Re-render edit list for current page
         const currentPage = pagesData.find(p => p.id === currentEditPageId);
         renderEditList(currentPage);
         renderPages();
@@ -764,13 +794,10 @@ async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
 async function deleteApp(appId) {
     if (!confirm('Remove this shortcut?')) return;
     await fetch(`/api/apps/${appId}`, { method: 'DELETE' });
-    // Remove from local apps
     appsData = appsData.filter(a => a.id !== appId);
-    // Remove from pages
     for (let page of pagesData) {
         page.appIds = page.appIds.filter(id => id !== appId);
     }
-    // Re-render edit list and main pages
     const currentPage = pagesData.find(p => p.id === currentEditPageId);
     renderEditList(currentPage);
     renderPages();
@@ -881,7 +908,6 @@ async function saveApp() {
             closeModalFn();
             // Reload apps and pages
             await fetchAppsAndPages();
-            // Refresh edit view
             if (document.getElementById('editView').style.display === 'flex') {
                 renderPageTabs();
                 const currentPage = pagesData.find(p => p.id === currentEditPageId);
