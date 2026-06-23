@@ -33,7 +33,6 @@ body {
 }
 .app-container::-webkit-scrollbar { display: none; }
 
-/* Page – flex column, centered, with 100px padding on all sides */
 .page {
     flex: 0 0 100%;
     height: 100%;
@@ -46,15 +45,13 @@ body {
     position: relative;
 }
 
-/* When pill is shown, add extra top padding to make room */
 .page.has-pill {
-    padding-top: 140px; /* 100px base + 40px for pill */
+    padding-top: 140px;
 }
 
-/* Page name pill – sits above the grid, not overlapping */
 .page-name-pill {
     position: absolute;
-    top: 100px; /* aligns with top padding */
+    top: 100px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(255,255,255,0.15);
@@ -77,19 +74,17 @@ body {
     pointer-events: none;
 }
 
-/* Grid container – centered, uses CSS variables for sizing */
 .page-grid {
     display: grid;
     gap: var(--gap-size, 16px);
     width: 100%;
-    max-width: 600px;  /* prevents too wide in landscape */
+    max-width: 600px;
     height: 100%;
     justify-items: center;
     align-content: center;
-    margin: 0 auto;  /* horizontal centering */
+    margin: 0 auto;
 }
 
-/* 3D Glass Button – square, uniform border */
 .app-card.glass-button {
     display: flex;
     flex-direction: column;
@@ -165,7 +160,6 @@ body {
 }
 .app-card .name:empty { display: none; }
 
-/* Page indicators */
 .page-indicators {
     position: absolute;
     bottom: 20px;
