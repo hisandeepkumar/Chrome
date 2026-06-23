@@ -7,6 +7,8 @@ import subprocess
 import uuid
 import re
 import base64
+import ctypes
+from ctypes import wintypes
 from flask import Flask, request, render_template, jsonify, send_from_directory
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget
 from PyQt5.QtCore import Qt
@@ -16,13 +18,80 @@ from io import BytesIO
 from zeroconf import ServiceInfo, Zeroconf
 from PIL import Image, ImageDraw, ImageFont
 
-# ---------- Optional Windows shortcut parsing ----------
-try:
-    import win32com.client
-    HAS_WIN32COM = True
-except ImportError:
-    HAS_WIN32COM = False
-    print("⚠️ win32com not installed – Windows Apps detection disabled.")
+# ---------- Windows Shortcut Parser (ctypes, no pywin32) ----------
+# Structure for SHFILEINFOW
+class SHFILEINFOW(ctypes.Structure):
+    _fields_ = [
+        ("hIcon", wintypes.HANDLE),
+        ("iIcon", ctypes.c_int),
+        ("dwAttributes", wintypes.DWORD),
+        ("szDisplayName", wintypes.WCHAR * 260),
+        ("szTypeName", wintypes.WCHAR * 80),
+    ]
+
+def get_lnk_target(lnk_path):
+    """Read the target of a .lnk file using shell32 (works without pywin32)."""
+    try:
+        shell32 = ctypes.windll.shell32
+        ole32 = ctypes.windll.ole32
+        # CLSID_ShellLink = {00021401-0000-0000-C000-000000000046}
+        CLSID_ShellLink = ctypes.create_guid("{00021401-0000-0000-C000-000000000046}")
+        # IID_IShellLinkW = {000214F9-0000-0000-C000-000000000046}
+        IID_IShellLinkW = ctypes.create_guid("{000214F9-0000-0000-C000-000000000046}")
+        
+        ole32.CoInitialize(None)
+        ppsl = ctypes.POINTER(ctypes.c_void_p)()
+        hr = ole32.CoCreateInstance(ctypes.byref(CLSID_ShellLink), None, 1, ctypes.byref(IID_IShellLinkW), ctypes.byref(ppsl))
+        if hr != 0:
+            return None
+        ppf = ctypes.POINTER(ctypes.c_void_p)()
+        IID_IPersistFile = ctypes.create_guid("{0000010B-0000-0000-C000-000000000046}")
+        hr = ppsl[0].QueryInterface(ctypes.byref(IID_IPersistFile), ctypes.byref(ppf))
+        if hr != 0:
+            return None
+        hr = ppf[0].Load(lnk_path, 0)
+        if hr != 0:
+            return None
+        target = ctypes.create_unicode_buffer(260)
+        ppsl[0].GetPath(target, 260, None, 0)
+        return target.value
+    except Exception:
+        return None
+
+def get_installed_windows_apps():
+    """Scan Start Menu folders for .lnk shortcuts and extract targets."""
+    apps = []
+    # Common Start Menu folders in Windows 10/11
+    folders = [
+        os.path.expandvars("%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs"),
+        os.path.expandvars("%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs"),
+        os.path.expandvars("%ALLUSERSPROFILE%\\Microsoft\\Windows\\Start Menu\\Programs")
+    ]
+    # Also check the user's pinned apps? (optional, but not needed)
+    seen = set()
+    for folder in folders:
+        if not os.path.exists(folder):
+            continue
+        for root, dirs, files in os.walk(folder):
+            for file in files:
+                if file.lower().endswith('.lnk'):
+                    lnk_path = os.path.join(root, file)
+                    target = get_lnk_target(lnk_path)
+                    if target and target.lower().endswith('.exe') and target not in seen:
+                        seen.add(target)
+                        name = os.path.splitext(file)[0]
+                        name = name.replace(' - Shortcut', '').strip()
+                        # Create stable ID
+                        app_id = f"winapp_{hash(target) & 0xFFFFFFFF:08x}"
+                        apps.append({
+                            "id": app_id,
+                            "name": name,
+                            "path": target,
+                            "icon": "🖥️",
+                            "is_windows_app": True,
+                            "is_system": True
+                        })
+    return apps
 
 # ---------- User Data Directory ----------
 APPDATA = os.path.expandvars('%APPDATA%')
@@ -104,49 +173,7 @@ DEFAULT_SETTINGS = {
 def get_capacity():
     return DEFAULT_SETTINGS["grid"]["cols"] * DEFAULT_SETTINGS["grid"]["rows"]  # 12
 
-# ---------- Windows Apps Detection ----------
-def get_installed_windows_apps():
-    """Return list of installed Windows apps (name, target path)."""
-    if not HAS_WIN32COM:
-        return []
-    apps = []
-    try:
-        shell = win32com.client.Dispatch("WScript.Shell")
-        folders = [
-            os.path.expandvars("%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs"),
-            os.path.expandvars("%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs")
-        ]
-        seen = set()
-        for folder in folders:
-            if not os.path.exists(folder):
-                continue
-            for root, dirs, files in os.walk(folder):
-                for file in files:
-                    if file.lower().endswith('.lnk'):
-                        lnk_path = os.path.join(root, file)
-                        try:
-                            shortcut = shell.CreateShortcut(lnk_path)
-                            target = shortcut.TargetPath
-                            if target and target.lower().endswith('.exe') and target not in seen:
-                                seen.add(target)
-                                name = os.path.splitext(file)[0]
-                                name = name.replace(' - Shortcut', '').strip()
-                                # Create a stable ID based on target path
-                                app_id = f"winapp_{hash(target) & 0xFFFFFFFF:08x}"
-                                apps.append({
-                                    "id": app_id,
-                                    "name": name,
-                                    "path": target,
-                                    "icon": "🖥️",
-                                    "is_windows_app": True,
-                                    "is_system": True
-                                })
-                        except:
-                            pass
-    except Exception as e:
-        print(f"Error scanning Windows apps: {e}")
-    return apps
-
+# ---------- Windows Apps Refresh Logic ----------
 def refresh_windows_apps():
     """Re-scan for new Windows apps and add them to config, but keep user deletions."""
     global config_data
@@ -163,38 +190,28 @@ def refresh_windows_apps():
             new_apps.append(app)
     
     if not new_apps:
-        # No new apps, but we need to ensure the windows page exists
+        # No new apps, but ensure windows page exists
         ensure_windows_page_exists()
         return len(new_apps)
     
     # Add new apps to config
     config_data['apps'].extend(new_apps)
-    
-    # Ensure windows page exists
-    ensure_windows_page_exists()
-    
-    # Now we need to add new apps to the appropriate windows page(s)
-    # We'll rebuild windows pages from scratch (keeping existing page order)
     rebuild_windows_pages()
-    
     save_config(config_data)
     return len(new_apps)
 
 def ensure_windows_page_exists():
     """Create Windows Applications page(s) if none exist."""
-    # Check if any page has type 'windows_apps'
     has_windows_page = any(p.get('type') == 'windows_apps' for p in config_data['pages'])
     if has_windows_page:
         return
-    # Create windows page(s)
     rebuild_windows_pages()
 
 def rebuild_windows_pages():
     """Rebuild the Windows Applications page(s) based on current windows apps in config."""
-    # Remove existing windows pages (they will be recreated)
+    # Remove existing windows pages
     config_data['pages'] = [p for p in config_data['pages'] if p.get('type') != 'windows_apps']
     
-    # Get all windows apps from config
     win_apps = [app for app in config_data['apps'] if app.get('is_windows_app', False)]
     if not win_apps:
         return
@@ -303,10 +320,8 @@ def load_config():
         page_id = str(uuid.uuid4())[:8]
         new_pages.append({"id": page_id, "name": "Page 1", "appIds": []})
     
-    # Now handle windows apps
-    # Remove any existing windows pages (they will be recreated)
+    # Handle windows apps
     data['pages'] = [p for p in data['pages'] if p.get('type') != 'windows_apps']
-    # Get windows apps from data (they should already be there)
     win_apps = [app for app in data['apps'] if app.get('is_windows_app', False)]
     if win_apps:
         win_page_apps = []
@@ -320,7 +335,6 @@ def load_config():
                 "type": "windows_apps",
                 "appIds": [app["id"] for app in page_apps]
             })
-        # Insert before system page
         sys_index = None
         for i, p in enumerate(new_pages):
             if p.get('name') == SYSTEM_PAGE_NAME:
@@ -330,9 +344,6 @@ def load_config():
             new_pages[sys_index:sys_index] = win_page_apps
         else:
             new_pages.extend(win_page_apps)
-    else:
-        # No windows apps, but we might have a windows page leftover? Already removed.
-        pass
     
     # Add system page at the end
     new_pages.append(system_page)
@@ -354,7 +365,7 @@ def save_config(data):
 
 config_data = load_config()
 
-# ---------- Routes ----------
+# ---------- Flask Routes ----------
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -390,7 +401,6 @@ def add_or_edit_app():
     if not name:
         name = ""
 
-    # Prevent editing windows apps
     if edit_id:
         for app in config_data['apps']:
             if app['id'] == edit_id and app.get('is_windows_app', False):
@@ -414,7 +424,6 @@ def add_or_edit_app():
         if file and file.filename:
             file.save(os.path.join(ICON_DIR, f'{new_id}.png'))
         
-        # Find target page (skip windows and system pages)
         target_page = None
         if page_id:
             for page in config_data['pages']:
@@ -428,7 +437,6 @@ def add_or_edit_app():
                     target_page = page
                     break
         if not target_page:
-            # Create new page before windows/system pages
             sys_index = None
             for i, p in enumerate(config_data['pages']):
                 if p.get('type') in ['windows_apps', 'system']:
@@ -449,7 +457,6 @@ def add_or_edit_app():
 def delete_app(app_id):
     if app_id in SYSTEM_APP_IDS:
         return jsonify({"status": "error", "msg": "Cannot delete system app"}), 400
-    # Allow deletion of windows apps (they will be re-added only if user clicks restore)
     config_data['apps'] = [a for a in config_data['apps'] if a['id'] != app_id]
     icon_path = os.path.join(ICON_DIR, f'{app_id}.png')
     if os.path.exists(icon_path):
@@ -468,7 +475,6 @@ def launch_app(app_id):
             if path.startswith('system:'):
                 action = path.split(':', 1)[1]
                 if action == 'restore_windows':
-                    # Refresh windows apps: add new ones, but keep user deletions
                     count = refresh_windows_apps()
                     return jsonify({"status": "restored", "count": count})
                 return jsonify({"status": "system", "action": action})
@@ -521,8 +527,6 @@ def delete_page(page_id):
         if page['id'] == page_id:
             if page.get('type') == 'system':
                 return jsonify({"status": "error", "msg": "Cannot delete system page"}), 400
-            # For windows page, we delete the page but keep the apps in config (they will be hidden)
-            # The apps remain in config so they can be restored later.
             break
     config_data['pages'] = [p for p in config_data['pages'] if p['id'] != page_id]
     save_config(config_data)
@@ -579,7 +583,6 @@ def move_app():
     from_index = data.get('fromIndex')
     to_index = data.get('toIndex')
     
-    # Prevent moving windows apps
     for app in config_data['apps']:
         if app['id'] == app_id and app.get('is_windows_app'):
             return jsonify({"status": "error", "msg": "Cannot move Windows app"}), 400
@@ -654,12 +657,6 @@ def import_config():
     config_data = imported
     save_config(config_data)
     return jsonify({"status": "ok"})
-
-# ---------- Windows Apps Refresh (separate endpoint) ----------
-@app.route('/api/windows-apps/refresh', methods=['POST'])
-def refresh_windows():
-    count = refresh_windows_apps()
-    return jsonify({"status": "refreshed", "count": count})
 
 # ---------- mDNS ----------
 def register_mdns():
