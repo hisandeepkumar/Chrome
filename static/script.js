@@ -88,7 +88,7 @@ function renderPages() {
         // Determine if we should show the page name pill
         const name = page.name || '';
         const isDefaultName = /^Page \d+$/.test(name);
-        const showPill = !isDefaultName && name.trim() !== '';
+        const showPill = !isDefaultName && name.trim() !== '' && page.name !== 'System Tools';
         
         if (showPill) {
             const namePill = document.createElement('div');
@@ -109,6 +109,11 @@ function renderPages() {
         gridDiv.style.width = '100%';
         gridDiv.style.justifyItems = 'center';
         gridDiv.style.alignContent = 'center';
+        
+        // Ensure we have space for the grid (set max-width to avoid overflow)
+        const iconSize = settings.grid?.icon_size || 64;
+        // Calculate max grid width based on columns and icon size with gaps
+        // We'll use CSS to handle it via minmax
         
         const appIds = page.appIds || [];
         appIds.forEach(appId => {
@@ -524,25 +529,28 @@ function renderPageTabs() {
     const tabsContainer = document.getElementById('pageTabs');
     tabsContainer.innerHTML = '';
     pagesData.forEach((page, index) => {
+        const isSystem = page.name === 'System Tools';
         const tab = document.createElement('div');
         tab.className = 'page-tab' + (page.id === currentEditPageId ? ' active' : '');
         tab.textContent = page.name || 'Page';
         tab.dataset.pageId = page.id;
-        tab.draggable = true;
+        tab.draggable = !isSystem; // system page cannot be dragged
         tab.addEventListener('click', () => {
             currentEditPageId = page.id;
             renderPageTabs();
             renderEditList(page);
         });
-        // Double-click to rename
-        tab.addEventListener('dblclick', () => {
-            const newName = prompt('Enter new page name:', page.name);
-            if (newName && newName.trim() !== '') {
-                renamePage(page.id, newName.trim());
-            }
-        });
-        // Delete page (except if only one page)
-        if (pagesData.length > 1) {
+        // Double-click to rename (only for non-system)
+        if (!isSystem) {
+            tab.addEventListener('dblclick', () => {
+                const newName = prompt('Enter new page name:', page.name);
+                if (newName && newName.trim() !== '') {
+                    renamePage(page.id, newName.trim());
+                }
+            });
+        }
+        // Delete page (except system and if >1 page)
+        if (!isSystem && pagesData.length > 1) {
             const del = document.createElement('span');
             del.className = 'page-tab-delete';
             del.textContent = '✕';
@@ -554,34 +562,36 @@ function renderPageTabs() {
             });
             tab.appendChild(del);
         }
-        // Drag events for reordering pages
-        tab.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('text/plain', page.id);
-            tab.classList.add('dragging');
-        });
-        tab.addEventListener('dragend', () => {
-            tab.classList.remove('dragging');
-        });
-        tab.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            const draggingTab = document.querySelector('.page-tab.dragging');
-            if (!draggingTab) return;
-            const rect = tab.getBoundingClientRect();
-            const midX = rect.left + rect.width / 2;
-            if (e.clientX < midX) {
-                tabsContainer.insertBefore(draggingTab, tab);
-            } else {
-                tabsContainer.insertBefore(draggingTab, tab.nextSibling);
-            }
-        });
-        tab.addEventListener('drop', (e) => {
-            e.preventDefault();
-            const draggedId = e.dataTransfer.getData('text/plain');
-            if (draggedId === page.id) return;
-            const tabs = tabsContainer.querySelectorAll('.page-tab');
-            const newOrder = Array.from(tabs).map(el => el.dataset.pageId);
-            reorderPages(newOrder);
-        });
+        // Drag events for reordering pages (only non-system)
+        if (!isSystem) {
+            tab.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', page.id);
+                tab.classList.add('dragging');
+            });
+            tab.addEventListener('dragend', () => {
+                tab.classList.remove('dragging');
+            });
+            tab.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const draggingTab = document.querySelector('.page-tab.dragging');
+                if (!draggingTab) return;
+                const rect = tab.getBoundingClientRect();
+                const midX = rect.left + rect.width / 2;
+                if (e.clientX < midX) {
+                    tabsContainer.insertBefore(draggingTab, tab);
+                } else {
+                    tabsContainer.insertBefore(draggingTab, tab.nextSibling);
+                }
+            });
+            tab.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const draggedId = e.dataTransfer.getData('text/plain');
+                if (draggedId === page.id) return;
+                const tabs = tabsContainer.querySelectorAll('.page-tab');
+                const newOrder = Array.from(tabs).map(el => el.dataset.pageId);
+                reorderPages(newOrder);
+            });
+        }
         tabsContainer.appendChild(tab);
     });
 }
@@ -613,16 +623,19 @@ function renderEditList(page) {
     appIds.forEach((appId, index) => {
         const app = appsData.find(a => a.id === appId);
         if (!app) return;
+        const isSystem = app.id === 'edit_shortcuts' || app.id === 'grid_settings';
         const item = document.createElement('div');
         item.className = 'edit-item';
-        item.draggable = true;
+        if (!isSystem) {
+            item.draggable = true;
+        }
         item.dataset.appId = app.id;
         item.dataset.pageId = page.id;
         item.dataset.index = index;
 
         const handle = document.createElement('span');
         handle.className = 'drag-handle';
-        handle.textContent = '☰';
+        handle.textContent = isSystem ? '🔒' : '☰';
         item.appendChild(handle);
 
         const iconDiv = document.createElement('div');
@@ -656,49 +669,55 @@ function renderEditList(page) {
         delBtn.textContent = '✕';
         delBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (isSystem) {
+                alert('Cannot delete system shortcut');
+                return;
+            }
             deleteApp(app.id);
         });
         actions.appendChild(editBtn);
         actions.appendChild(delBtn);
         item.appendChild(actions);
 
-        // Drag within/between pages
-        item.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('text/plain', JSON.stringify({appId: app.id, fromPageId: page.id, index: index}));
-            item.classList.add('dragging');
-        });
-        item.addEventListener('dragend', () => {
-            item.classList.remove('dragging');
-        });
-        item.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            const draggingItem = document.querySelector('.edit-item.dragging');
-            if (!draggingItem) return;
-            const rect = item.getBoundingClientRect();
-            const midY = rect.top + rect.height / 2;
-            if (e.clientY < midY) {
-                list.insertBefore(draggingItem, item);
-            } else {
-                list.insertBefore(draggingItem, item.nextSibling);
-            }
-        });
-        item.addEventListener('drop', (e) => {
-            e.preventDefault();
-            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-            const fromPageId = data.fromPageId;
-            const appId = data.appId;
-            const fromIndex = data.index;
-            const items = list.querySelectorAll('.edit-item:not(.dragging)');
-            let newIndex = 0;
-            for (let i = 0; i < items.length; i++) {
-                if (items[i] === item) {
-                    newIndex = i;
-                    break;
+        // Drag within/between pages (only non-system)
+        if (!isSystem) {
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', JSON.stringify({appId: app.id, fromPageId: page.id, index: index}));
+                item.classList.add('dragging');
+            });
+            item.addEventListener('dragend', () => {
+                item.classList.remove('dragging');
+            });
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const draggingItem = document.querySelector('.edit-item.dragging');
+                if (!draggingItem) return;
+                const rect = item.getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                if (e.clientY < midY) {
+                    list.insertBefore(draggingItem, item);
+                } else {
+                    list.insertBefore(draggingItem, item.nextSibling);
                 }
-            }
-            const targetPageId = currentEditPageId;
-            moveApp(appId, fromPageId, targetPageId, fromIndex, newIndex);
-        });
+            });
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                const fromPageId = data.fromPageId;
+                const appId = data.appId;
+                const fromIndex = data.index;
+                const items = list.querySelectorAll('.edit-item:not(.dragging)');
+                let newIndex = 0;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i] === item) {
+                        newIndex = i;
+                        break;
+                    }
+                }
+                const targetPageId = currentEditPageId;
+                moveApp(appId, fromPageId, targetPageId, fromIndex, newIndex);
+            });
+        }
 
         list.appendChild(item);
     });
@@ -793,6 +812,10 @@ async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
 
 // ---------- Delete App ----------
 async function deleteApp(appId) {
+    if (appId === 'edit_shortcuts' || appId === 'grid_settings') {
+        alert('Cannot delete system shortcut');
+        return;
+    }
     if (!confirm('Remove this shortcut?')) return;
     await fetch(`/api/apps/${appId}`, { method: 'DELETE' });
     appsData = appsData.filter(a => a.id !== appId);
@@ -840,6 +863,9 @@ function openModal(appId) {
     document.getElementById('iconFile').value = '';
     document.getElementById('iconPreview').style.display = 'none';
     document.getElementById('modalTitle').innerText = 'Add New Shortcut';
+    
+    // Set the page_id to the currently selected page in edit view
+    document.getElementById('selectedPageId').value = currentEditPageId || '';
 
     const currentDisplay = document.getElementById('currentIconDisplay');
     currentDisplay.innerHTML = '📦';
@@ -877,6 +903,7 @@ async function saveApp() {
     const path = document.getElementById('appPath').value.trim();
     const fileInput = document.getElementById('iconFile');
     const file = fileInput.files[0];
+    const pageId = document.getElementById('selectedPageId').value;
 
     if (!path) {
         document.getElementById('modalMsg').innerText = '⚠️ Path is required!';
@@ -886,6 +913,7 @@ async function saveApp() {
     const formData = new FormData();
     formData.append('name', name);
     formData.append('path', path);
+    formData.append('page_id', pageId);
     if (editId) {
         formData.append('edit_id', editId);
         if (!file) {
@@ -907,6 +935,7 @@ async function saveApp() {
         if (res.ok) {
             const data = await res.json();
             closeModalFn();
+            // Reload apps and pages
             await fetchAppsAndPages();
             if (document.getElementById('editView').style.display === 'flex') {
                 renderPageTabs();
