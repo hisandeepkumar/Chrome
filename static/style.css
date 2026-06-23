@@ -33,29 +33,28 @@ body {
 }
 .app-container::-webkit-scrollbar { display: none; }
 
-/* Page – flex column, centered, with min 100px padding on all sides */
+/* Page – flex column, centered, with 100px padding on all sides */
 .page {
     flex: 0 0 100%;
     height: 100%;
     scroll-snap-align: start;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
-    padding: 100px 100px 100px 100px;  /* minimum 100px from each edge */
+    justify-content: center;
+    padding: 100px 100px 100px 100px;
     position: relative;
-    transition: padding 0.2s;
 }
 
-/* When pill is shown, we need extra top space for pill */
+/* When pill is shown, add extra top padding to make room */
 .page.has-pill {
-    padding-top: 140px;  /* 100px + pill height */
+    padding-top: 140px; /* 100px base + 40px for pill */
 }
 
-/* Page name pill – only shown for custom names */
+/* Page name pill – sits above the grid, not overlapping */
 .page-name-pill {
     position: absolute;
-    top: 100px;  /* aligns with top padding */
+    top: 100px; /* aligns with top padding */
     left: 50%;
     transform: translateX(-50%);
     background: rgba(255,255,255,0.15);
@@ -78,20 +77,19 @@ body {
     pointer-events: none;
 }
 
-/* Grid container – centered, auto margins, respects padding */
+/* Grid container – centered, uses CSS variables for sizing */
 .page-grid {
     display: grid;
-    gap: 16px;
+    gap: var(--gap-size, 16px);
     width: 100%;
-    max-width: 600px;  /* prevent too wide */
+    max-width: 600px;  /* prevents too wide in landscape */
     height: 100%;
     justify-items: center;
     align-content: center;
-    margin: 0 auto;  /* center horizontally */
-    padding: 0;
+    margin: 0 auto;  /* horizontal centering */
 }
 
-/* 3D Glass Button – SQUARE */
+/* 3D Glass Button – square, uniform border */
 .app-card.glass-button {
     display: flex;
     flex-direction: column;
@@ -101,14 +99,14 @@ body {
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
     width: var(--icon-size, 64px);
-    height: var(--icon-size, 64px);  /* square */
+    height: var(--icon-size, 64px);
     background: linear-gradient(145deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05));
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255,255,255,0.15);
     border-radius: 16px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.3);
-    padding: 4px;  /* small inner padding */
+    padding: 4px;
     gap: 2px;
     user-select: none;
     -webkit-user-drag: none;
@@ -133,7 +131,6 @@ body {
     transform: scale(0.95);
 }
 
-/* Icon inside square – scaled down to fit with name */
 .app-card .icon {
     display: flex;
     align-items: center;
