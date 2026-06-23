@@ -43,49 +43,35 @@ def generate_pwa_icons():
             img.save(path)
 generate_pwa_icons()
 
-# ---------- Default Apps (including system tools) ----------
+# ---------- Default Apps ----------
 DEFAULT_APPS = [
-    # Web Apps
     {"id": "whatsapp", "name": "WhatsApp", "path": "https://web.whatsapp.com", "icon": "💬"},
     {"id": "youtube", "name": "YouTube", "path": "https://youtube.com", "icon": "▶️"},
     {"id": "deepseek", "name": "DeepSeek", "path": "https://chat.deepseek.com", "icon": "🤖"},
     {"id": "chatgpt", "name": "ChatGPT", "path": "https://chatgpt.com", "icon": "✨"},
     {"id": "gmail", "name": "Gmail", "path": "https://gmail.com", "icon": "📧"},
     {"id": "newtab", "name": "New Tab", "path": "about:blank", "icon": "➕"},
-    
-    # System Settings
     {"id": "wifi", "name": "WiFi", "path": "ms-settings:network-wifi", "icon": "📶"},
     {"id": "bluetooth", "name": "Bluetooth", "path": "ms-settings:bluetooth", "icon": "📳"},
     {"id": "display", "name": "Display", "path": "ms-settings:display", "icon": "🖥️"},
     {"id": "sound", "name": "Sound", "path": "ms-settings:sound", "icon": "🔊"},
-    
-    # Volume Control
     {"id": "volup", "name": "Volume +", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]175)", "icon": "🔊+"},
     {"id": "voldown", "name": "Volume -", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]174)", "icon": "🔊-"},
-    
-    # Brightness Control
     {"id": "brightup", "name": "Brightness +", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,100)", "icon": "☀️+"},
     {"id": "brightdown", "name": "Brightness -", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,50)", "icon": "☀️-"},
-    
-    # Utility
     {"id": "lockpc", "name": "Lock PC", "path": "rundll32.exe user32.dll,LockWorkStation", "icon": "🔒"},
     {"id": "taskmgr", "name": "Task Manager", "path": "taskmgr.exe", "icon": "⚙️"},
     {"id": "snipping", "name": "Snipping Tool", "path": "SnippingTool.exe", "icon": "✂️"},
     {"id": "control", "name": "Control Panel", "path": "control.exe", "icon": "📟"},
-    
-    # Common Apps
     {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "📝"},
     {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "🧮"},
     {"id": "explorer", "name": "Explorer", "path": "explorer.exe", "icon": "📁"},
     {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "⌨️"},
     {"id": "closeall", "name": "Close Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"},
-    
-    # System tools (these appear as icons)
     {"id": "edit_shortcuts", "name": "Edit Shortcuts", "path": "system:edit", "icon": "✏️", "is_system": True},
     {"id": "grid_settings", "name": "Grid Settings", "path": "system:settings", "icon": "⚙️", "is_system": True}
 ]
 
-# ... (same as before, only DEFAULT_SETTINGS updated)
 DEFAULT_SETTINGS = {
     "grid": {
         "cols": 2,
@@ -97,30 +83,39 @@ DEFAULT_SETTINGS = {
         "bg_value": "#000000"
     }
 }
-# rest of main.py unchanged
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
+        data = {
+            "apps": DEFAULT_APPS,
+            "pages": [{"id": "page1", "name": "Home", "appIds": [app["id"] for app in DEFAULT_APPS]}],
+            "settings": DEFAULT_SETTINGS
+        }
         with open(CONFIG_FILE, 'w') as f:
-            json.dump({"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}, f, indent=4)
-        return {"apps": DEFAULT_APPS, "settings": DEFAULT_SETTINGS}
+            json.dump(data, f, indent=4)
+        return data
     
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
     
-    if 'settings' not in data:
-        data['settings'] = DEFAULT_SETTINGS
-    elif 'grid' not in data.get('settings', {}):
-        data['settings'] = DEFAULT_SETTINGS
+    # Ensure pages exist
+    if 'pages' not in data or not data['pages']:
+        data['pages'] = [{"id": "page1", "name": "Home", "appIds": [app["id"] for app in DEFAULT_APPS]}]
     
-    # Merge new default apps (including system ones)
+    # Ensure all default apps are in apps list
     existing_ids = {app['id'] for app in data.get('apps', [])}
     for default_app in DEFAULT_APPS:
         if default_app['id'] not in existing_ids:
             data['apps'].append(default_app)
+            # also add to first page if exists
+            if data['pages']:
+                data['pages'][0]['appIds'].append(default_app['id'])
     
-    if 'apps' not in data or not data['apps']:
-        data['apps'] = DEFAULT_APPS
+    # Ensure settings exist
+    if 'settings' not in data:
+        data['settings'] = DEFAULT_SETTINGS
+    elif 'grid' not in data['settings']:
+        data['settings']['grid'] = DEFAULT_SETTINGS['grid']
     
     with open(CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
@@ -150,24 +145,10 @@ def serve_pwa_icon(filename):
 def serve_user_icon(filename):
     return send_from_directory(ICON_DIR, filename)
 
+# ---------- Apps API ----------
 @app.route('/api/apps', methods=['GET'])
 def get_apps():
     return jsonify(config_data['apps'])
-
-@app.route('/api/settings', methods=['GET'])
-def get_settings():
-    return jsonify(config_data.get('settings', DEFAULT_SETTINGS))
-
-@app.route('/api/settings', methods=['POST'])
-def save_settings():
-    data = request.json
-    if isinstance(data, dict):
-        if 'grid' in data:
-            config_data['settings'] = data
-        else:
-            config_data['settings'] = {"grid": data}
-    save_config(config_data)
-    return jsonify({"status": "ok", "message": "Settings saved successfully"})
 
 @app.route('/api/apps', methods=['POST'])
 def add_or_edit_app():
@@ -199,6 +180,9 @@ def add_or_edit_app():
         config_data['apps'].append(new_app)
         if file and file.filename:
             file.save(os.path.join(ICON_DIR, f'{new_id}.png'))
+        # Add to first page by default
+        if config_data['pages']:
+            config_data['pages'][0]['appIds'].append(new_id)
         save_config(config_data)
         return jsonify({"status": "added", "app": new_app})
 
@@ -208,23 +192,19 @@ def delete_app(app_id):
     icon_path = os.path.join(ICON_DIR, f'{app_id}.png')
     if os.path.exists(icon_path):
         os.remove(icon_path)
+    # Remove from all pages
+    for page in config_data['pages']:
+        if app_id in page['appIds']:
+            page['appIds'].remove(app_id)
     save_config(config_data)
     return jsonify({"status": "deleted"})
 
 @app.route('/api/reorder', methods=['POST'])
 def reorder_apps():
     new_order = request.json.get('order', [])
-    app_map = {app['id']: app for app in config_data['apps']}
-    reordered = []
-    for app_id in new_order:
-        if app_id in app_map:
-            reordered.append(app_map[app_id])
-    for app in config_data['apps']:
-        if app not in reordered:
-            reordered.append(app)
-    config_data['apps'] = reordered
-    save_config(config_data)
-    return jsonify({"status": "ok"})
+    # This reorders apps globally? We'll use it for reordering within a page now.
+    # We'll handle page reordering separately.
+    return jsonify({"status": "ok"})  # not used
 
 @app.route('/api/launch/<app_id>', methods=['GET'])
 def launch_app(app_id):
@@ -252,24 +232,122 @@ def launch_app(app_id):
                 return jsonify({"status": "error", "msg": str(e)}), 500
     return jsonify({"status": "not_found"}), 404
 
+# ---------- Pages API ----------
+@app.route('/api/pages', methods=['GET'])
+def get_pages():
+    return jsonify(config_data['pages'])
+
+@app.route('/api/pages', methods=['POST'])
+def add_page():
+    name = request.json.get('name', 'New Page')
+    page_id = str(uuid.uuid4())[:8]
+    new_page = {"id": page_id, "name": name, "appIds": []}
+    config_data['pages'].append(new_page)
+    save_config(config_data)
+    return jsonify({"status": "added", "page": new_page})
+
+@app.route('/api/pages/<page_id>', methods=['DELETE'])
+def delete_page(page_id):
+    config_data['pages'] = [p for p in config_data['pages'] if p['id'] != page_id]
+    save_config(config_data)
+    return jsonify({"status": "deleted"})
+
+@app.route('/api/pages/<page_id>', methods=['PUT'])
+def rename_page(page_id):
+    new_name = request.json.get('name')
+    for page in config_data['pages']:
+        if page['id'] == page_id:
+            page['name'] = new_name
+            save_config(config_data)
+            return jsonify({"status": "renamed"})
+    return jsonify({"status": "not_found"}), 404
+
+@app.route('/api/pages/reorder', methods=['POST'])
+def reorder_pages():
+    new_order = request.json.get('order', [])
+    page_map = {p['id']: p for p in config_data['pages']}
+    reordered = []
+    for pid in new_order:
+        if pid in page_map:
+            reordered.append(page_map[pid])
+    # Add any missing
+    for p in config_data['pages']:
+        if p not in reordered:
+            reordered.append(p)
+    config_data['pages'] = reordered
+    save_config(config_data)
+    return jsonify({"status": "ok"})
+
+@app.route('/api/pages/move-app', methods=['POST'])
+def move_app():
+    data = request.json
+    app_id = data.get('appId')
+    from_page_id = data.get('fromPageId')
+    to_page_id = data.get('toPageId')
+    from_index = data.get('fromIndex')
+    to_index = data.get('toIndex')
+    
+    # Remove from source page if provided
+    if from_page_id:
+        for page in config_data['pages']:
+            if page['id'] == from_page_id:
+                if app_id in page['appIds']:
+                    page['appIds'].remove(app_id)
+                break
+    # Insert into target page at specified index
+    if to_page_id is not None:
+        for page in config_data['pages']:
+            if page['id'] == to_page_id:
+                if to_index is not None:
+                    page['appIds'].insert(to_index, app_id)
+                else:
+                    page['appIds'].append(app_id)
+                break
+    else:
+        # If no target page, just remove (app deleted) – but we have delete endpoint
+        pass
+    save_config(config_data)
+    return jsonify({"status": "ok"})
+
+# ---------- Settings API ----------
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    return jsonify(config_data.get('settings', DEFAULT_SETTINGS))
+
+@app.route('/api/settings', methods=['POST'])
+def save_settings():
+    data = request.json
+    if 'grid' in data:
+        config_data['settings'] = data
+    else:
+        config_data['settings'] = {"grid": data}
+    save_config(config_data)
+    return jsonify({"status": "ok"})
+
+# ---------- Export / Import ----------
+@app.route('/api/export', methods=['GET'])
+def export_config():
+    # Return full config as JSON
+    return jsonify(config_data)
+
+@app.route('/api/import', methods=['POST'])
+def import_config():
+    imported = request.json
+    if not imported or 'apps' not in imported or 'pages' not in imported or 'settings' not in imported:
+        return jsonify({"status": "error", "msg": "Invalid data"}), 400
+    # Overwrite current config
+    global config_data
+    config_data = imported
+    save_config(config_data)
+    return jsonify({"status": "ok"})
+
 # ---------- mDNS ----------
 def register_mdns():
     zeroconf = Zeroconf()
-    hostname = socket.gethostname()
-    ip = socket.gethostbyname(hostname)
-    if not ip.startswith('192.168.') and not ip.startswith('10.') and not ip.startswith('172.'):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            s.connect(('8.8.8.8', 80))
-            ip = s.getsockname()[0]
-        except:
-            pass
-        finally:
-            s.close()
     info = ServiceInfo(
         "_http._tcp.local.",
         "WinLauncher._http._tcp.local.",
-        addresses=[socket.inet_aton(ip)],
+        addresses=[socket.inet_aton("127.0.0.1")],  # Use localhost for mDNS
         port=PORT,
         properties={"path": "/"},
         server="winlauncher.local.",
@@ -278,18 +356,7 @@ def register_mdns():
     print(f"✅ mDNS: http://winlauncher.local:{PORT}")
     return zeroconf
 
-# ---------- PyQt QR Window ----------
-def get_local_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-    except:
-        ip = '127.0.0.1'
-    finally:
-        s.close()
-    return ip
-
+# ---------- PyQt QR Window (shows mDNS address) ----------
 class QRWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -306,8 +373,7 @@ class QRWindow(QMainWindow):
         label_info.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_info)
 
-        local_ip = get_local_ip()
-        url = f"http://{local_ip}:{PORT}"
+        url = f"http://winlauncher.local:{PORT}"
         label_url = QLabel(f"🌐 {url}")
         label_url.setStyleSheet("color: #aaa; font-size: 14px; text-align: center; margin-bottom: 10px;")
         label_url.setAlignment(Qt.AlignCenter)
@@ -323,7 +389,7 @@ class QRWindow(QMainWindow):
         label_qr.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_qr)
 
-        label_mdns = QLabel(f"📶 Also: http://winlauncher.local:{PORT}")
+        label_mdns = QLabel(f"📶 Also: http://{socket.gethostname()}.local:{PORT}")
         label_mdns.setStyleSheet("color: #888; font-size: 12px; text-align: center; margin-top: 15px;")
         label_mdns.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_mdns)
