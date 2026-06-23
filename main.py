@@ -98,20 +98,16 @@ def load_config():
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
     
-    # Ensure pages exist
     if 'pages' not in data or not data['pages']:
         data['pages'] = [{"id": "page1", "name": "Home", "appIds": [app["id"] for app in DEFAULT_APPS]}]
     
-    # Ensure all default apps are in apps list
     existing_ids = {app['id'] for app in data.get('apps', [])}
     for default_app in DEFAULT_APPS:
         if default_app['id'] not in existing_ids:
             data['apps'].append(default_app)
-            # also add to first page if exists
             if data['pages']:
                 data['pages'][0]['appIds'].append(default_app['id'])
     
-    # Ensure settings exist
     if 'settings' not in data:
         data['settings'] = DEFAULT_SETTINGS
     elif 'grid' not in data['settings']:
@@ -180,9 +176,23 @@ def add_or_edit_app():
         config_data['apps'].append(new_app)
         if file and file.filename:
             file.save(os.path.join(ICON_DIR, f'{new_id}.png'))
-        # Add to first page by default
-        if config_data['pages']:
-            config_data['pages'][0]['appIds'].append(new_id)
+        
+        # Find a page with space (cols * rows)
+        cols = config_data['settings']['grid'].get('cols', 2)
+        rows = config_data['settings']['grid'].get('rows', 6)
+        capacity = cols * rows
+        target_page = None
+        for page in config_data['pages']:
+            if len(page['appIds']) < capacity:
+                target_page = page
+                break
+        if target_page is None:
+            # Create new page
+            page_id = str(uuid.uuid4())[:8]
+            target_page = {"id": page_id, "name": f"Page {len(config_data['pages'])+1}", "appIds": []}
+            config_data['pages'].append(target_page)
+        target_page['appIds'].append(new_id)
+        
         save_config(config_data)
         return jsonify({"status": "added", "app": new_app})
 
@@ -192,19 +202,11 @@ def delete_app(app_id):
     icon_path = os.path.join(ICON_DIR, f'{app_id}.png')
     if os.path.exists(icon_path):
         os.remove(icon_path)
-    # Remove from all pages
     for page in config_data['pages']:
         if app_id in page['appIds']:
             page['appIds'].remove(app_id)
     save_config(config_data)
     return jsonify({"status": "deleted"})
-
-@app.route('/api/reorder', methods=['POST'])
-def reorder_apps():
-    new_order = request.json.get('order', [])
-    # This reorders apps globally? We'll use it for reordering within a page now.
-    # We'll handle page reordering separately.
-    return jsonify({"status": "ok"})  # not used
 
 @app.route('/api/launch/<app_id>', methods=['GET'])
 def launch_app(app_id):
@@ -270,7 +272,6 @@ def reorder_pages():
     for pid in new_order:
         if pid in page_map:
             reordered.append(page_map[pid])
-    # Add any missing
     for p in config_data['pages']:
         if p not in reordered:
             reordered.append(p)
@@ -287,14 +288,12 @@ def move_app():
     from_index = data.get('fromIndex')
     to_index = data.get('toIndex')
     
-    # Remove from source page if provided
     if from_page_id:
         for page in config_data['pages']:
             if page['id'] == from_page_id:
                 if app_id in page['appIds']:
                     page['appIds'].remove(app_id)
                 break
-    # Insert into target page at specified index
     if to_page_id is not None:
         for page in config_data['pages']:
             if page['id'] == to_page_id:
@@ -303,9 +302,6 @@ def move_app():
                 else:
                     page['appIds'].append(app_id)
                 break
-    else:
-        # If no target page, just remove (app deleted) – but we have delete endpoint
-        pass
     save_config(config_data)
     return jsonify({"status": "ok"})
 
@@ -327,7 +323,6 @@ def save_settings():
 # ---------- Export / Import ----------
 @app.route('/api/export', methods=['GET'])
 def export_config():
-    # Return full config as JSON
     return jsonify(config_data)
 
 @app.route('/api/import', methods=['POST'])
@@ -335,19 +330,18 @@ def import_config():
     imported = request.json
     if not imported or 'apps' not in imported or 'pages' not in imported or 'settings' not in imported:
         return jsonify({"status": "error", "msg": "Invalid data"}), 400
-    # Overwrite current config
     global config_data
     config_data = imported
     save_config(config_data)
     return jsonify({"status": "ok"})
 
-# ---------- mDNS ----------
+# ---------- mDNS (for local network discovery) ----------
 def register_mdns():
     zeroconf = Zeroconf()
     info = ServiceInfo(
         "_http._tcp.local.",
         "WinLauncher._http._tcp.local.",
-        addresses=[socket.inet_aton("127.0.0.1")],  # Use localhost for mDNS
+        addresses=[socket.inet_aton("127.0.0.1")],
         port=PORT,
         properties={"path": "/"},
         server="winlauncher.local.",
@@ -356,7 +350,18 @@ def register_mdns():
     print(f"✅ mDNS: http://winlauncher.local:{PORT}")
     return zeroconf
 
-# ---------- PyQt QR Window (shows mDNS address) ----------
+# ---------- PyQt QR Window (shows local IP) ----------
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+    except:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
+
 class QRWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -373,7 +378,8 @@ class QRWindow(QMainWindow):
         label_info.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_info)
 
-        url = f"http://winlauncher.local:{PORT}"
+        local_ip = get_local_ip()
+        url = f"http://{local_ip}:{PORT}"
         label_url = QLabel(f"🌐 {url}")
         label_url.setStyleSheet("color: #aaa; font-size: 14px; text-align: center; margin-bottom: 10px;")
         label_url.setAlignment(Qt.AlignCenter)
@@ -389,7 +395,7 @@ class QRWindow(QMainWindow):
         label_qr.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_qr)
 
-        label_mdns = QLabel(f"📶 Also: http://{socket.gethostname()}.local:{PORT}")
+        label_mdns = QLabel(f"📶 Also: http://winlauncher.local:{PORT}")
         label_mdns.setStyleSheet("color: #888; font-size: 12px; text-align: center; margin-top: 15px;")
         label_mdns.setAlignment(Qt.AlignCenter)
         layout.addWidget(label_mdns)
