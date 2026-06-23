@@ -11,6 +11,9 @@
     <meta name="theme-color" content="#000000">
 </head>
 <body>
+    <!-- Background container for blur -->
+    <div id="bgContainer"></div>
+
     <button id="fullscreenBtn" class="fullscreen-btn">⛶</button>
 
     <div id="mainView">
@@ -36,15 +39,20 @@
         </div>
     </div>
 
-    <!-- Grid Settings Modal (removed glow, added grid size) -->
+    <!-- Grid Settings Modal -->
     <div id="gridSettingsModal" class="modal" style="display:none;">
         <div class="modal-content glass" style="max-width:450px;">
             <span class="close-btn" id="closeSettings">&times;</span>
             <h2>⚙️ Grid Settings</h2>
             <div class="settings-group">
-                <label>Grid Size</label>
-                <input type="range" id="gridSize" min="50" max="150" value="100">
-                <span id="gridSizeVal">100%</span>
+                <label>Icon Size (px)</label>
+                <input type="range" id="iconSize" min="40" max="120" value="64">
+                <span id="iconSizeVal">64</span>
+            </div>
+            <div class="settings-group">
+                <label>Grid Size (spacing)</label>
+                <input type="range" id="gridSize" min="5" max="40" value="16">
+                <span id="gridSizeVal">16</span>
             </div>
             <div class="settings-group">
                 <label>Background Blur</label>
