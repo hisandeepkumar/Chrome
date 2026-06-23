@@ -423,10 +423,12 @@ function initGridSettings() {
         }
     });
 
+    // ---------- Export ----------
     exportBtn.addEventListener('click', async () => {
         try {
             const res = await fetch('/api/export');
             const data = await res.json();
+            // Include wallpaper file if any? The data already includes bg_value as data URL.
             const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -436,11 +438,14 @@ function initGridSettings() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            document.getElementById('settingsMsg').textContent = '✅ Export successful!';
+            setTimeout(() => document.getElementById('settingsMsg').textContent = '', 3000);
         } catch (e) {
             alert('Export failed: ' + e.message);
         }
     });
 
+    // ---------- Import ----------
     importBtn.addEventListener('click', () => {
         importFileInput.click();
     });
@@ -507,10 +512,23 @@ async function saveSettingsToServer(iconSize, gridSize, blur, bgType, bgValue) {
 function initEditView() {
     const closeEdit = document.getElementById('closeEdit');
     const addPageBtn = document.getElementById('addPageBtn');
+    const editPageNameBtn = document.getElementById('editPageNameBtn');
     const addMoreBtn = document.getElementById('addMoreBtn');
 
     closeEdit.addEventListener('click', closeEditView);
     addPageBtn.addEventListener('click', addNewPage);
+    editPageNameBtn.addEventListener('click', () => {
+        if (!currentEditPageId) return;
+        const page = pagesData.find(p => p.id === currentEditPageId);
+        if (!page || page.name === 'System Tools') {
+            alert('Cannot rename system page');
+            return;
+        }
+        const newName = prompt('Enter new page name:', page.name);
+        if (newName && newName.trim() !== '') {
+            renamePage(currentEditPageId, newName.trim());
+        }
+    });
     addMoreBtn.addEventListener('click', () => openModal(null));
 }
 
