@@ -55,7 +55,8 @@ def get_lnk_target(lnk_path):
         target = ctypes.create_unicode_buffer(260)
         ppsl[0].GetPath(target, 260, None, 0)
         return target.value
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Error reading .lnk file {lnk_path}: {str(e)}")
         return None
 
 def get_installed_windows_apps():
@@ -67,30 +68,42 @@ def get_installed_windows_apps():
         os.path.expandvars("%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs"),
         os.path.expandvars("%ALLUSERSPROFILE%\\Microsoft\\Windows\\Start Menu\\Programs")
     ]
-    # Also check the user's pinned apps? (optional, but not needed)
     seen = set()
     for folder in folders:
         if not os.path.exists(folder):
+            print(f"ℹ️ Folder not found: {folder}")
             continue
-        for root, dirs, files in os.walk(folder):
-            for file in files:
-                if file.lower().endswith('.lnk'):
-                    lnk_path = os.path.join(root, file)
-                    target = get_lnk_target(lnk_path)
-                    if target and target.lower().endswith('.exe') and target not in seen:
-                        seen.add(target)
-                        name = os.path.splitext(file)[0]
-                        name = name.replace(' - Shortcut', '').strip()
-                        # Create stable ID
-                        app_id = f"winapp_{hash(target) & 0xFFFFFFFF:08x}"
-                        apps.append({
-                            "id": app_id,
-                            "name": name,
-                            "path": target,
-                            "icon": "🖥️",
-                            "is_windows_app": True,
-                            "is_system": True
-                        })
+        try:
+            for root, dirs, files in os.walk(folder):
+                for file in files:
+                    if file.lower().endswith('.lnk'):
+                        lnk_path = os.path.join(root, file)
+                        try:
+                            target = get_lnk_target(lnk_path)
+                            if target and target.lower().endswith('.exe') and target not in seen:
+                                # Verify file actually exists
+                                if os.path.exists(target):
+                                    seen.add(target)
+                                    name = os.path.splitext(file)[0]
+                                    name = name.replace(' - Shortcut', '').strip()
+                                    # Create stable ID
+                                    app_id = f"winapp_{hash(target) & 0xFFFFFFFF:08x}"
+                                    apps.append({
+                                        "id": app_id,
+                                        "name": name,
+                                        "path": target,
+                                        "icon": "🖥️",
+                                        "is_windows_app": True,
+                                        "is_system": True
+                                    })
+                        except Exception as e:
+                            print(f"⚠️ Error processing {lnk_path}: {str(e)}")
+                            continue
+        except Exception as e:
+            print(f"⚠️ Error scanning folder {folder}: {str(e)}")
+            continue
+    
+    print(f"✅ Found {len(apps)} Windows apps")
     return apps
 
 # ---------- User Data Directory ----------
@@ -244,6 +257,7 @@ def rebuild_windows_pages():
 # ---------- Config Load ----------
 def load_config():
     if not os.path.exists(CONFIG_FILE):
+        print("📝 Creating new config...")
         all_apps = DEFAULT_APPS[:]
         system_apps = [a for a in all_apps if a['id'] in SYSTEM_APP_IDS]
         normal_apps = [a for a in all_apps if a['id'] not in SYSTEM_APP_IDS]
@@ -270,6 +284,7 @@ def load_config():
         }
         with open(CONFIG_FILE, 'w') as f:
             json.dump(data, f, indent=4)
+        print("✅ Config created")
         return data
     
     with open(CONFIG_FILE, 'r') as f:
@@ -363,7 +378,26 @@ def save_config(data):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
 
+# Load config once at startup
+print("🚀 Loading configuration...")
 config_data = load_config()
+
+# AUTO-DETECT WINDOWS APPS ON STARTUP ✅ FIX
+print("🔍 Scanning for Windows apps on startup...")
+initial_windows_apps = get_installed_windows_apps()
+if initial_windows_apps:
+    existing_windows_ids = {app['id'] for app in config_data['apps'] if app.get('is_windows_app', False)}
+    new_apps = [app for app in initial_windows_apps if app['id'] not in existing_windows_ids]
+    if new_apps:
+        print(f"➕ Adding {len(new_apps)} new Windows apps to config...")
+        config_data['apps'].extend(new_apps)
+        rebuild_windows_pages()
+        save_config(config_data)
+        print("✅ Windows apps added successfully!")
+    else:
+        print("ℹ️ No new Windows apps found")
+else:
+    print("ℹ️ No Windows apps detected")
 
 # ---------- Flask Routes ----------
 @app.route('/')
