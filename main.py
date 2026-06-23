@@ -84,11 +84,26 @@ DEFAULT_SETTINGS = {
     }
 }
 
+def get_capacity():
+    return DEFAULT_SETTINGS["grid"]["cols"] * DEFAULT_SETTINGS["grid"]["rows"]  # 12
+
 def load_config():
     if not os.path.exists(CONFIG_FILE):
+        # Create default pages, each with up to capacity apps
+        all_apps = DEFAULT_APPS[:]
+        pages = []
+        capacity = get_capacity()
+        for i in range(0, len(all_apps), capacity):
+            page_apps = all_apps[i:i+capacity]
+            page_id = str(uuid.uuid4())[:8]
+            pages.append({
+                "id": page_id,
+                "name": f"Page {len(pages)+1}",
+                "appIds": [app["id"] for app in page_apps]
+            })
         data = {
-            "apps": DEFAULT_APPS,
-            "pages": [{"id": "page1", "name": "Home", "appIds": [app["id"] for app in DEFAULT_APPS]}],
+            "apps": all_apps,
+            "pages": pages,
             "settings": DEFAULT_SETTINGS
         }
         with open(CONFIG_FILE, 'w') as f:
@@ -98,21 +113,82 @@ def load_config():
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
     
-    if 'pages' not in data or not data['pages']:
-        data['pages'] = [{"id": "page1", "name": "Home", "appIds": [app["id"] for app in DEFAULT_APPS]}]
-    
+    # Ensure apps list has all defaults, add new ones if missing
     existing_ids = {app['id'] for app in data.get('apps', [])}
+    new_apps = []
     for default_app in DEFAULT_APPS:
         if default_app['id'] not in existing_ids:
-            data['apps'].append(default_app)
-            if data['pages']:
-                data['pages'][0]['appIds'].append(default_app['id'])
+            new_apps.append(default_app)
+    if new_apps:
+        data['apps'].extend(new_apps)
     
+    # Ensure pages exist and are properly filled within capacity
+    if 'pages' not in data or not data['pages']:
+        data['pages'] = []
+    capacity = get_capacity()
+    # Rebuild pages if needed: take all app IDs and distribute
+    all_app_ids = [app['id'] for app in data['apps']]
+    # Remove system apps from distribution (they stay in pages? Actually they are part of apps but we might not want them in pages? But they are in apps)
+    # We'll keep them as normal.
+    # Redistribute apps across pages with capacity
+    if data['pages']:
+        # Check if any page exceeds capacity or if total pages capacity is less than apps
+        total_capacity = len(data['pages']) * capacity
+        if len(all_app_ids) > total_capacity:
+            # Need more pages
+            extra_pages_needed = (len(all_app_ids) - total_capacity + capacity - 1) // capacity
+            for i in range(extra_pages_needed):
+                page_id = str(uuid.uuid4())[:8]
+                data['pages'].append({"id": page_id, "name": f"Page {len(data['pages'])+1}", "appIds": []})
+        # Now distribute app ids into pages
+        # Flatten existing appIds from all pages
+        current_app_ids = []
+        for page in data['pages']:
+            current_app_ids.extend(page['appIds'])
+        # Remove duplicates and add missing apps
+        # We'll rebuild page appIds from scratch based on order
+        # First, preserve order of apps as they appear in data['apps']
+        # We'll take all app ids in order from apps list
+        ordered_app_ids = [app['id'] for app in data['apps']]
+        # Now assign to pages sequentially
+        page_index = 0
+        for idx, app_id in enumerate(ordered_app_ids):
+            # Find a page that has this app id, if not, add to current page
+            found = False
+            for page in data['pages']:
+                if app_id in page['appIds']:
+                    found = True
+                    break
+            if not found:
+                # Add to current page, if page full move to next
+                while len(data['pages'][page_index]['appIds']) >= capacity:
+                    page_index += 1
+                    if page_index >= len(data['pages']):
+                        # create new page
+                        new_page_id = str(uuid.uuid4())[:8]
+                        data['pages'].append({"id": new_page_id, "name": f"Page {len(data['pages'])+1}", "appIds": []})
+                data['pages'][page_index]['appIds'].append(app_id)
+        # Remove any app ids that are not in apps list
+        valid_app_ids = {app['id'] for app in data['apps']}
+        for page in data['pages']:
+            page['appIds'] = [aid for aid in page['appIds'] if aid in valid_app_ids]
+    else:
+        # No pages, create them
+        ordered_app_ids = [app['id'] for app in data['apps']]
+        page_index = 0
+        for idx, app_id in enumerate(ordered_app_ids):
+            if idx % capacity == 0:
+                page_id = str(uuid.uuid4())[:8]
+                data['pages'].append({"id": page_id, "name": f"Page {len(data['pages'])+1}", "appIds": []})
+            data['pages'][-1]['appIds'].append(app_id)
+    
+    # Ensure settings exist
     if 'settings' not in data:
         data['settings'] = DEFAULT_SETTINGS
     elif 'grid' not in data['settings']:
         data['settings']['grid'] = DEFAULT_SETTINGS['grid']
     
+    # Save the corrected config
     with open(CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
     
@@ -177,10 +253,8 @@ def add_or_edit_app():
         if file and file.filename:
             file.save(os.path.join(ICON_DIR, f'{new_id}.png'))
         
-        # Find a page with space (cols * rows)
-        cols = config_data['settings']['grid'].get('cols', 2)
-        rows = config_data['settings']['grid'].get('rows', 6)
-        capacity = cols * rows
+        # Find a page with space
+        capacity = get_capacity()
         target_page = None
         for page in config_data['pages']:
             if len(page['appIds']) < capacity:
@@ -189,7 +263,8 @@ def add_or_edit_app():
         if target_page is None:
             # Create new page
             page_id = str(uuid.uuid4())[:8]
-            target_page = {"id": page_id, "name": f"Page {len(config_data['pages'])+1}", "appIds": []}
+            page_num = len(config_data['pages']) + 1
+            target_page = {"id": page_id, "name": f"Page {page_num}", "appIds": []}
             config_data['pages'].append(target_page)
         target_page['appIds'].append(new_id)
         
