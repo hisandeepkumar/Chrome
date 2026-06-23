@@ -82,7 +82,7 @@ body {
     display: grid;
     gap: var(--gap-size, 16px);
     width: 100%;
-    max-width: 600px;
+    
     justify-items: center;
     align-content: center;
     margin: 0 auto;  /* ← this keeps it centered */
