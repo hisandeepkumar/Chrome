@@ -85,10 +85,9 @@ function renderPages() {
         pageDiv.className = 'page';
         pageDiv.dataset.pageIndex = idx;
         
-        // Determine if we should show the page name pill
         const name = page.name || '';
         const isDefaultName = /^Page \d+$/.test(name);
-        const showPill = !isDefaultName && name.trim() !== '' && page.name !== 'System Tools';
+        const showPill = !isDefaultName && name.trim() !== '' && name !== 'System Tools';
         
         if (showPill) {
             const namePill = document.createElement('div');
@@ -100,20 +99,10 @@ function renderPages() {
             pageDiv.classList.remove('has-pill');
         }
         
-        // Grid container
         const gridDiv = document.createElement('div');
         gridDiv.className = 'page-grid';
         gridDiv.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
         gridDiv.style.gridTemplateRows = `repeat(${rows}, auto)`;
-        gridDiv.style.gap = '16px';
-        gridDiv.style.width = '100%';
-        gridDiv.style.justifyItems = 'center';
-        gridDiv.style.alignContent = 'center';
-        
-        // Ensure we have space for the grid (set max-width to avoid overflow)
-        const iconSize = settings.grid?.icon_size || 64;
-        // Calculate max grid width based on columns and icon size with gaps
-        // We'll use CSS to handle it via minmax
         
         const appIds = page.appIds || [];
         appIds.forEach(appId => {
@@ -158,7 +147,6 @@ function createAppCard(app) {
     return card;
 }
 
-// ---------- Fixed cols/rows with swap on landscape ----------
 function getCols() {
     const isLandscape = window.innerWidth > window.innerHeight;
     return isLandscape ? 6 : 2;
@@ -181,10 +169,14 @@ function updateIndicators(total) {
 
 function applySettings() {
     const g = settings.grid || {};
-    const iconSize = g.icon_size || 64;
-    const glowSize = g.glow_size || 20;
+    const gridFactor = (g.grid_size || 100) / 100;
+    const baseIconSize = 64;
+    const baseGap = 16;
+    const iconSize = Math.round(baseIconSize * gridFactor);
+    const gapSize = Math.round(baseGap * gridFactor);
+    
     document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
-    document.documentElement.style.setProperty('--glow-size', glowSize + 'px');
+    document.documentElement.style.setProperty('--gap-size', gapSize + 'px');
     
     if (g.bg_type === 'color') {
         document.body.style.background = g.bg_value || '#000000';
@@ -226,7 +218,7 @@ function applySettings() {
     document.body.style.backdropFilter = `blur(${blur}px)`;
 }
 
-// ---------- Swipe (page navigation) ----------
+// ---------- Swipe ----------
 function setupSwipeDetection() {
     const container = document.getElementById('appContainer');
     let startX = 0, startY = 0, isSwiping = false;
@@ -324,7 +316,7 @@ function toggleFullscreen() {
     }
 }
 
-// ---------- Grid Settings (no cols/rows) ----------
+// ---------- Grid Settings (grid size instead of glow) ----------
 function initGridSettings() {
     const modal = document.getElementById('gridSettingsModal');
     const close = document.getElementById('closeSettings');
@@ -335,10 +327,8 @@ function initGridSettings() {
 
     window.openGridSettings = function() {
         const g = settings.grid || {};
-        document.getElementById('iconSize').value = g.icon_size || 64;
-        document.getElementById('iconSizeVal').textContent = g.icon_size || 64;
-        document.getElementById('glowSize').value = g.glow_size || 20;
-        document.getElementById('glowSizeVal').textContent = g.glow_size || 20;
+        document.getElementById('gridSize').value = g.grid_size || 100;
+        document.getElementById('gridSizeVal').textContent = (g.grid_size || 100) + '%';
         document.getElementById('bgBlur').value = g.blur || 0;
         document.getElementById('bgBlurVal').textContent = g.blur || 0;
         document.getElementById('bgType').value = g.bg_type || 'color';
@@ -359,11 +349,8 @@ function initGridSettings() {
         if (e.target === modal) modal.style.display = 'none';
     });
 
-    document.getElementById('iconSize').addEventListener('input', function() {
-        document.getElementById('iconSizeVal').textContent = this.value;
-    });
-    document.getElementById('glowSize').addEventListener('input', function() {
-        document.getElementById('glowSizeVal').textContent = this.value;
+    document.getElementById('gridSize').addEventListener('input', function() {
+        document.getElementById('gridSizeVal').textContent = this.value + '%';
     });
     document.getElementById('bgBlur').addEventListener('input', function() {
         document.getElementById('bgBlurVal').textContent = this.value;
@@ -380,8 +367,7 @@ function initGridSettings() {
     });
 
     save.addEventListener('click', async () => {
-        const iconSize = parseInt(document.getElementById('iconSize').value) || 64;
-        const glowSize = parseInt(document.getElementById('glowSize').value) || 20;
+        const gridSize = parseInt(document.getElementById('gridSize').value) || 100;
         const blur = parseFloat(document.getElementById('bgBlur').value) || 0;
         const bgType = document.getElementById('bgType').value;
         let bgValue = '';
@@ -390,7 +376,7 @@ function initGridSettings() {
         
         if (bgType === 'color') {
             bgValue = document.getElementById('bgColor').value;
-            await saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue);
+            await saveSettingsToServer(gridSize, blur, bgType, bgValue);
             modal.style.display = 'none';
         } else {
             const fileInput = document.getElementById('bgFile');
@@ -403,7 +389,7 @@ function initGridSettings() {
                 const reader = new FileReader();
                 reader.onload = async function(e) {
                     bgValue = e.target.result;
-                    await saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue);
+                    await saveSettingsToServer(gridSize, blur, bgType, bgValue);
                     modal.style.display = 'none';
                 };
                 reader.onerror = function() {
@@ -412,13 +398,12 @@ function initGridSettings() {
                 reader.readAsDataURL(file);
             } else {
                 bgValue = settings.grid?.bg_value || '';
-                await saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue);
+                await saveSettingsToServer(gridSize, blur, bgType, bgValue);
                 modal.style.display = 'none';
             }
         }
     });
 
-    // Export
     exportBtn.addEventListener('click', async () => {
         try {
             const res = await fetch('/api/export');
@@ -437,7 +422,6 @@ function initGridSettings() {
         }
     });
 
-    // Import
     importBtn.addEventListener('click', () => {
         importFileInput.click();
     });
@@ -465,13 +449,12 @@ function initGridSettings() {
     });
 }
 
-async function saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue) {
+async function saveSettingsToServer(gridSize, blur, bgType, bgValue) {
     const newSettings = {
         grid: {
             cols: 2,
             rows: 6,
-            icon_size: iconSize,
-            glow_size: glowSize,
+            grid_size: gridSize,
             blur: blur,
             bg_type: bgType,
             bg_value: bgValue
@@ -500,7 +483,7 @@ async function saveSettingsToServer(iconSize, glowSize, blur, bgType, bgValue) {
     }
 }
 
-// ---------- Edit View with Pages ----------
+// ---------- Edit View ----------
 function initEditView() {
     const closeEdit = document.getElementById('closeEdit');
     const addPageBtn = document.getElementById('addPageBtn');
@@ -524,7 +507,6 @@ function closeEditView() {
     document.getElementById('editView').style.display = 'none';
 }
 
-// ---------- Page Tabs with drag reorder ----------
 function renderPageTabs() {
     const tabsContainer = document.getElementById('pageTabs');
     tabsContainer.innerHTML = '';
@@ -534,13 +516,12 @@ function renderPageTabs() {
         tab.className = 'page-tab' + (page.id === currentEditPageId ? ' active' : '');
         tab.textContent = page.name || 'Page';
         tab.dataset.pageId = page.id;
-        tab.draggable = !isSystem; // system page cannot be dragged
+        tab.draggable = !isSystem;
         tab.addEventListener('click', () => {
             currentEditPageId = page.id;
             renderPageTabs();
             renderEditList(page);
         });
-        // Double-click to rename (only for non-system)
         if (!isSystem) {
             tab.addEventListener('dblclick', () => {
                 const newName = prompt('Enter new page name:', page.name);
@@ -549,7 +530,6 @@ function renderPageTabs() {
                 }
             });
         }
-        // Delete page (except system and if >1 page)
         if (!isSystem && pagesData.length > 1) {
             const del = document.createElement('span');
             del.className = 'page-tab-delete';
@@ -562,7 +542,6 @@ function renderPageTabs() {
             });
             tab.appendChild(del);
         }
-        // Drag events for reordering pages (only non-system)
         if (!isSystem) {
             tab.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('text/plain', page.id);
@@ -679,7 +658,6 @@ function renderEditList(page) {
         actions.appendChild(delBtn);
         item.appendChild(actions);
 
-        // Drag within/between pages (only non-system)
         if (!isSystem) {
             item.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('text/plain', JSON.stringify({appId: app.id, fromPageId: page.id, index: index}));
@@ -723,7 +701,6 @@ function renderEditList(page) {
     });
 }
 
-// ---------- Page CRUD ----------
 async function addNewPage() {
     const name = prompt('Enter page name:', 'New Page');
     if (!name || name.trim() === '') return;
@@ -779,7 +756,6 @@ async function deletePage(pageId) {
     } catch (e) {}
 }
 
-// ---------- Move App between pages ----------
 async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
     try {
         await fetch('/api/pages/move-app', {
@@ -810,7 +786,6 @@ async function moveApp(appId, fromPageId, toPageId, fromIndex, toIndex) {
     }
 }
 
-// ---------- Delete App ----------
 async function deleteApp(appId) {
     if (appId === 'edit_shortcuts' || appId === 'grid_settings') {
         alert('Cannot delete system shortcut');
@@ -864,7 +839,6 @@ function openModal(appId) {
     document.getElementById('iconPreview').style.display = 'none';
     document.getElementById('modalTitle').innerText = 'Add New Shortcut';
     
-    // Set the page_id to the currently selected page in edit view
     document.getElementById('selectedPageId').value = currentEditPageId || '';
 
     const currentDisplay = document.getElementById('currentIconDisplay');
@@ -935,7 +909,6 @@ async function saveApp() {
         if (res.ok) {
             const data = await res.json();
             closeModalFn();
-            // Reload apps and pages
             await fetchAppsAndPages();
             if (document.getElementById('editView').style.display === 'flex') {
                 renderPageTabs();
