@@ -18,38 +18,31 @@
         <div id="pageIndicators" class="page-indicators"></div>
     </div>
 
-    <!-- Edit Overlay -->
+    <!-- Edit Overlay (with pages management) -->
     <div id="editView" class="edit-overlay" style="display:none;">
         <div class="edit-container glass">
             <div class="edit-header">
                 <h2>✏️ Edit Shortcuts</h2>
                 <button id="closeEdit" class="close-btn">&times;</button>
             </div>
-            <div id="editList" class="edit-list"></div>
+            <!-- Page Tabs -->
+            <div id="pageTabs" class="page-tabs"></div>
+            <!-- Page Content: list of apps in that page -->
+            <div id="pageContent" class="edit-page-content">
+                <div id="editList" class="edit-list"></div>
+            </div>
             <div class="edit-footer">
-                <button id="addMoreBtn" class="glass-btn primary">➕ Add More</button>
+                <button id="addPageBtn" class="glass-btn">➕ Add Page</button>
+                <button id="addMoreBtn" class="glass-btn primary">➕ Add Shortcut</button>
             </div>
         </div>
     </div>
 
-    <!-- Grid Settings Modal (simplified) -->
+    <!-- Grid Settings Modal (with export/import) -->
     <div id="gridSettingsModal" class="modal" style="display:none;">
         <div class="modal-content glass" style="max-width:450px;">
             <span class="close-btn" id="closeSettings">&times;</span>
             <h2>⚙️ Grid Settings</h2>
-            
-
-<!-- Inside grid settings modal, change labels -->
-<div class="settings-group">
-    <label>Columns (Portrait)</label>
-    <input type="number" id="gridCols" min="1" max="8" value="2">
-</div>
-<div class="settings-group">
-    <label>Rows (Portrait)</label>
-    <input type="number" id="gridRows" min="1" max="6" value="6">
-</div>
-<!-- rest unchanged -->
-            
             <div class="settings-group">
                 <label>Icon Size (px)</label>
                 <input type="range" id="iconSize" min="40" max="120" value="64">
@@ -82,6 +75,11 @@
                 <input type="file" id="bgFile" accept="image/*,video/*">
             </div>
             <button id="saveSettingsBtn" class="glass-btn primary">Save Settings</button>
+            <div style="display:flex; gap:10px; margin-top:15px;">
+                <button id="exportBtn" class="glass-btn">📤 Export</button>
+                <button id="importBtn" class="glass-btn">📥 Import</button>
+                <input type="file" id="importFileInput" accept=".sb,application/json" style="display:none;">
+            </div>
             <p id="settingsMsg" style="color:#ff6b6b; margin-top:10px;"></p>
         </div>
     </div>
