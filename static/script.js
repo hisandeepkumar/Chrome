@@ -124,7 +124,10 @@ function createAppCard(app) {
     const card = document.createElement('div');
     card.className = 'app-card glass-button';
     card.dataset.id = app.id;
-    let iconHtml = `<span class="icon">${app.icon || '📦'}</span>`;
+    
+    // Use Font Awesome icon if present, else fallback to emoji
+    let iconHtml = `<i class="${app.icon || 'fas fa-box'}"></i>`;
+    // Check for custom uploaded icon
     fetch(`/user-icons/${app.id}.png`, { method: 'HEAD' })
         .then(res => {
             if (res.ok) {
@@ -134,14 +137,15 @@ function createAppCard(app) {
                 }
             }
         }).catch(() => {});
-    card.innerHTML = `${iconHtml}<span class="name">${app.name}</span>`;
+    // We wrap icon in a span with class "icon" for replacement
+    card.innerHTML = `<span class="icon">${iconHtml}</span><span class="name">${app.name || ''}</span>`;
+    
     card.addEventListener('click', () => {
         if (app.id === 'edit_shortcuts') {
             openEditView();
         } else if (app.id === 'grid_settings') {
             openGridSettings();
         } else if (app.id === 'restore_windows_apps') {
-            // Trigger restore and reload
             launchApp(app.id);
         } else {
             launchApp(app.id);
@@ -313,7 +317,6 @@ async function launchApp(id) {
             if (data.action === 'edit') openEditView();
             else if (data.action === 'settings') openGridSettings();
             else if (data.action === 'restore_windows') {
-                // Restore completed, reload data
                 alert(`Windows Apps restored! ${data.count} new apps added.`);
                 await fetchAppsAndPages();
                 if (document.getElementById('editView').style.display === 'flex') {
@@ -323,7 +326,6 @@ async function launchApp(id) {
                 }
             }
         } else if (data.status === 'restored') {
-            // For restore action
             alert(`Windows Apps restored! ${data.count} new apps added.`);
             await fetchAppsAndPages();
             if (document.getElementById('editView').style.display === 'flex') {
@@ -536,6 +538,7 @@ function initEditView() {
     const closeEdit = document.getElementById('closeEdit');
     const addPageBtn = document.getElementById('addPageBtn');
     const editPageNameBtn = document.getElementById('editPageNameBtn');
+    const deletePageBtn = document.getElementById('deletePageBtn');
     const addMoreBtn = document.getElementById('addMoreBtn');
 
     closeEdit.addEventListener('click', closeEditView);
@@ -543,8 +546,10 @@ function initEditView() {
     editPageNameBtn.addEventListener('click', () => {
         if (!currentEditPageId) return;
         const page = pagesData.find(p => p.id === currentEditPageId);
-        if (!page || page.type === 'system' || page.type === 'windows_apps') {
-            alert('Cannot rename special page');
+        if (!page) return;
+        // Prevent rename for System Tools page (API will also reject)
+        if (page.name === 'System Tools') {
+            alert('Cannot rename the System Tools page.');
             return;
         }
         const newName = prompt('Enter new page name:', page.name);
@@ -552,11 +557,26 @@ function initEditView() {
             renamePage(currentEditPageId, newName.trim());
         }
     });
+    deletePageBtn.addEventListener('click', () => {
+        if (!currentEditPageId) return;
+        const page = pagesData.find(p => p.id === currentEditPageId);
+        if (!page) return;
+        if (page.name === 'System Tools') {
+            alert('Cannot delete the System Tools page.');
+            return;
+        }
+        if (page.type === 'windows_apps') {
+            if (!confirm(`Delete the entire "${page.name}" page? This will remove all Windows apps from the launcher (you can restore them later).`)) return;
+        } else {
+            if (!confirm(`Delete page "${page.name}"?`)) return;
+        }
+        deletePage(currentEditPageId);
+    });
     addMoreBtn.addEventListener('click', () => {
         const page = pagesData.find(p => p.id === currentEditPageId);
         if (!page) return;
-        if (page.type === 'windows_apps' || page.type === 'system') {
-            alert('Cannot add shortcuts to this page');
+        if (page.type === 'windows_apps' || page.type === 'system' || page.name === 'System Tools') {
+            alert('Cannot add shortcuts to this page.');
             return;
         }
         openModal(null);
@@ -580,7 +600,7 @@ function renderPageTabs() {
     const tabsContainer = document.getElementById('pageTabs');
     tabsContainer.innerHTML = '';
     pagesData.forEach((page, index) => {
-        const isSystem = page.type === 'system';
+        const isSystem = page.type === 'system' || page.name === 'System Tools';
         const isWindows = page.type === 'windows_apps';
         const tab = document.createElement('div');
         tab.className = 'page-tab' + (page.id === currentEditPageId ? ' active' : '');
@@ -592,7 +612,7 @@ function renderPageTabs() {
             renderPageTabs();
             renderEditList(page);
         });
-        // Double-click to rename (only normal pages)
+        // Double-click to rename (only normal pages, not System Tools)
         if (!isSystem && !isWindows) {
             tab.addEventListener('dblclick', () => {
                 const newName = prompt('Enter new page name:', page.name);
@@ -601,7 +621,7 @@ function renderPageTabs() {
                 }
             });
         }
-        // Delete page (except system and windows pages)
+        // Delete button for non-system pages (except if only one normal page remains)
         if (!isSystem && pagesData.length > 1) {
             const del = document.createElement('span');
             del.className = 'page-tab-delete';
@@ -609,7 +629,6 @@ function renderPageTabs() {
             del.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (isWindows) {
-                    // Deleting windows page will remove all windows apps from config
                     if (!confirm(`Delete the entire "${page.name}" page? This will remove all Windows apps from the launcher (you can restore them later).`)) return;
                 } else {
                     if (!confirm(`Delete page "${page.name}"?`)) return;
@@ -618,6 +637,7 @@ function renderPageTabs() {
             });
             tab.appendChild(del);
         }
+        // Drag and drop for reordering (only non-system, non-windows pages)
         if (!isSystem && !isWindows) {
             tab.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('text/plain', page.id);
@@ -675,7 +695,7 @@ function renderEditList(page) {
     list.innerHTML = '';
     if (!page) return;
     const isWindowsPage = page.type === 'windows_apps';
-    const isSystemPage = page.type === 'system';
+    const isSystemPage = page.type === 'system' || page.name === 'System Tools';
     const appIds = page.appIds || [];
     appIds.forEach((appId, index) => {
         const app = appsData.find(a => a.id === appId);
@@ -696,19 +716,23 @@ function renderEditList(page) {
 
         const handle = document.createElement('span');
         handle.className = 'drag-handle';
-        handle.textContent = (isSystemApp || isWindowsApp) ? '🔒' : '☰';
+        handle.textContent = (isSystemApp || isWindowsApp || isSystemPage || isWindowsPage) ? '🔒' : '☰';
         item.appendChild(handle);
 
         const iconDiv = document.createElement('div');
         iconDiv.className = 'item-icon';
+        // Check for custom icon
         fetch(`/user-icons/${app.id}.png`, { method: 'HEAD' })
             .then(res => {
                 if (res.ok) {
                     iconDiv.innerHTML = `<img src="/user-icons/${app.id}.png" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
                 } else {
-                    iconDiv.textContent = app.icon || '📦';
+                    // Use Font Awesome
+                    iconDiv.innerHTML = `<i class="${app.icon || 'fas fa-box'}"></i>`;
                 }
-            }).catch(() => { iconDiv.textContent = app.icon || '📦'; });
+            }).catch(() => {
+                iconDiv.innerHTML = `<i class="${app.icon || 'fas fa-box'}"></i>`;
+            });
         item.appendChild(iconDiv);
 
         const nameSpan = document.createElement('span');
@@ -746,7 +770,7 @@ function renderEditList(page) {
         if (isSystemApp || isWindowsApp || isWindowsPage) {
             editBtn.style.display = 'none';
         }
-        // Delete button visible for all except system apps
+        // Delete button visible for all except system apps (but show for Windows apps)
         if (isSystemApp || isSystemPage) {
             delBtn.style.display = 'none';
         }
@@ -959,10 +983,10 @@ function openModal(appId) {
                         currentDisplay.innerHTML = `<img src="/user-icons/${app.id}.png" alt="icon">`;
                         currentDisplay.classList.add('glow');
                     } else {
-                        currentDisplay.textContent = app.icon || '📦';
+                        currentDisplay.innerHTML = `<i class="${app.icon || 'fas fa-box'}"></i>`;
                     }
                 }).catch(() => {
-                    currentDisplay.textContent = app.icon || '📦';
+                    currentDisplay.innerHTML = `<i class="${app.icon || 'fas fa-box'}"></i>`;
                 });
         }
     }
@@ -993,10 +1017,10 @@ async function saveApp() {
         formData.append('edit_id', editId);
         if (!file) {
             const existing = appsData.find(a => a.id === editId);
-            formData.append('icon', existing ? existing.icon : '📦');
+            formData.append('icon', existing ? existing.icon : 'fas fa-box');
         }
     } else {
-        formData.append('icon', '📦');
+        formData.append('icon', 'fas fa-box');
     }
     if (file) {
         formData.append('icon_file', file);
