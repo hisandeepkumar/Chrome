@@ -78,12 +78,12 @@ def get_installed_programs_from_registry():
                                             "id": app_id,
                                             "name": display_name,
                                             "path": exe_path,
-                                            "icon": "fas fa-windows",  # Font Awesome icon
+                                            "icon": "fas fa-windows",
                                             "is_windows_app": True,
                                             "is_system": False
                                         })
                                         count += 1
-                                        if count <= 5:  # Show first 5
+                                        if count <= 5:
                                             print(f"   ✅ Found: {display_name}")
                             except:
                                 pass
@@ -124,12 +124,10 @@ def get_installed_windows_apps_from_shortcuts():
                         total_scanned += 1
                         lnk_path = os.path.join(root, file)
                         
-                        # Try to extract target path from .lnk binary
                         try:
                             with open(lnk_path, 'rb') as f:
                                 data = f.read()
                             
-                            # Extract strings from binary
                             strings = []
                             current = b''
                             for byte in data:
@@ -140,7 +138,6 @@ def get_installed_windows_apps_from_shortcuts():
                                         strings.append(current.decode('utf-8', errors='ignore'))
                                     current = b''
                             
-                            # Find .exe path
                             for s in strings:
                                 if '.exe' in s.lower() and len(s) > 10:
                                     if os.path.exists(s):
@@ -176,7 +173,6 @@ def get_installed_windows_apps():
     all_apps = []
     seen_ids = set()
     
-    # Try registry first (most reliable)
     try:
         registry_apps = get_installed_programs_from_registry()
         for app in registry_apps:
@@ -186,7 +182,6 @@ def get_installed_windows_apps():
     except Exception as e:
         print(f"⚠️ Registry method failed: {str(e)[:50]}\n")
     
-    # Try shortcuts as fallback
     try:
         shortcut_apps = get_installed_windows_apps_from_shortcuts()
         for app in shortcut_apps:
@@ -251,7 +246,7 @@ DEFAULT_APPS = [
     {"id": "facebook", "name": "Facebook", "path": "https://facebook.com", "icon": "fab fa-facebook"},
     {"id": "google", "name": "Google", "path": "https://google.com", "icon": "fab fa-google"},
     {"id": "twitter", "name": "Twitter", "path": "https://twitter.com", "icon": "fab fa-twitter"},
-    {"id": "chat", "name": "Chat", "path": "https://chat.openai.com", "icon": "fas fa-comment-dots"},  # or any chat
+    {"id": "chat", "name": "Chat", "path": "https://chat.openai.com", "icon": "fas fa-comment-dots"},
     {"id": "deepseek", "name": "DeepSeek", "path": "https://chat.deepseek.com", "icon": "fas fa-robot"},
     {"id": "gemini", "name": "Gemini", "path": "https://gemini.google.com", "icon": "fas fa-brain"},
     {"id": "claude", "name": "Claude", "path": "https://claude.ai", "icon": "fas fa-hand-sparkles"},
@@ -259,27 +254,44 @@ DEFAULT_APPS = [
     {"id": "whatsapp_web", "name": "Web WhatsApp", "path": "https://web.whatsapp.com", "icon": "fab fa-whatsapp"},
     {"id": "telegram_web", "name": "Web Telegram", "path": "https://web.telegram.org", "icon": "fab fa-telegram-plane"},
 
-    # VLC, MS Word, OBS Studio
+    # VLC shortcuts
     {"id": "vlc", "name": "VLC", "path": "vlc.exe", "icon": "fas fa-play-circle"},
-    {"id": "word", "name": "MS Word", "path": "WINWORD.EXE", "icon": "fas fa-file-word"},
-    {"id": "obs", "name": "OBS Studio", "path": "obs64.exe", "icon": "fas fa-video"},
+    {"id": "vlc_playpause", "name": "VLC Play/Pause", "path": "vlc.exe --play-pause", "icon": "fas fa-play"},
+    {"id": "vlc_next", "name": "VLC Next", "path": "vlc.exe --next", "icon": "fas fa-step-forward"},
+    {"id": "vlc_prev", "name": "VLC Previous", "path": "vlc.exe --prev", "icon": "fas fa-step-backward"},
+    {"id": "vlc_volup", "name": "VLC Vol +", "path": "vlc.exe --volume 100", "icon": "fas fa-volume-up"},
+    {"id": "vlc_voldown", "name": "VLC Vol -", "path": "vlc.exe --volume 50", "icon": "fas fa-volume-down"},
+    {"id": "vlc_mute", "name": "VLC Mute", "path": "vlc.exe --mute", "icon": "fas fa-volume-mute"},
+    {"id": "vlc_unmute", "name": "VLC Unmute", "path": "vlc.exe --unmute", "icon": "fas fa-volume-off"},
 
-    # Quick Settings Apps
+    # MS Word shortcuts
+    {"id": "word", "name": "MS Word", "path": "WINWORD.EXE", "icon": "fas fa-file-word"},
+    {"id": "word_new", "name": "Word New", "path": "WINWORD.EXE /n", "icon": "fas fa-file"},
+    {"id": "word_open", "name": "Word Open", "path": "WINWORD.EXE /o", "icon": "fas fa-folder-open"},
+    {"id": "word_print", "name": "Word Print", "path": "WINWORD.EXE /p", "icon": "fas fa-print"},
+
+    # OBS shortcuts
+    {"id": "obs", "name": "OBS Studio", "path": "obs64.exe", "icon": "fas fa-video"},
+    {"id": "obs_startrec", "name": "OBS Start Rec", "path": "obs64.exe --startrecording", "icon": "fas fa-circle"},
+    {"id": "obs_stoprec", "name": "OBS Stop Rec", "path": "obs64.exe --stoprecording", "icon": "fas fa-stop-circle"},
+    {"id": "obs_pause", "name": "OBS Pause", "path": "obs64.exe --pause", "icon": "fas fa-pause-circle"},
+    {"id": "obs_unpause", "name": "OBS Unpause", "path": "obs64.exe --unpause", "icon": "fas fa-play-circle"},
+
+    # Quick Settings (first 12)
     {"id": "volup", "name": "Volume +", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]175)", "icon": "fas fa-volume-up"},
     {"id": "voldown", "name": "Volume -", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]174)", "icon": "fas fa-volume-down"},
     {"id": "brightup", "name": "Brightness +", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,100)", "icon": "fas fa-sun"},
     {"id": "brightdown", "name": "Brightness -", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,50)", "icon": "fas fa-sun"},
     {"id": "mute", "name": "Mute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-volume-mute"},
-    {"id": "unmute", "name": "Unmute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-volume-up"},  # Toggle
-    {"id": "micmute", "name": "Mic Mute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-microphone-slash"},  # Might need actual toggle
+    {"id": "unmute", "name": "Unmute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-volume-up"},
+    {"id": "micmute", "name": "Mic Mute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-microphone-slash"},
     {"id": "micunmute", "name": "Mic Unmute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-microphone"},
     {"id": "bluetooth", "name": "Add Bluetooth", "path": "ms-settings:bluetooth", "icon": "fab fa-bluetooth-b"},
     {"id": "minimizeall", "name": "Minimize All", "path": "powershell -c (New-Object -ComObject shell.application).MinimizeAll()", "icon": "fas fa-window-minimize"},
     {"id": "closeall", "name": "Close All Apps", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "fas fa-times-circle"},
     {"id": "taskmgr", "name": "Task Manager", "path": "taskmgr.exe", "icon": "fas fa-tasks"},
+    # Additional Quick Settings (next 12)
     {"id": "control", "name": "Control Center", "path": "control.exe", "icon": "fas fa-cogs"},
-
-    # Additional system tools (existing)
     {"id": "wifi", "name": "WiFi", "path": "ms-settings:network-wifi", "icon": "fas fa-wifi"},
     {"id": "display", "name": "Display", "path": "ms-settings:display", "icon": "fas fa-desktop"},
     {"id": "sound", "name": "Sound", "path": "ms-settings:sound", "icon": "fas fa-volume-up"},
@@ -289,6 +301,8 @@ DEFAULT_APPS = [
     {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "fas fa-calculator"},
     {"id": "explorer", "name": "Explorer", "path": "explorer.exe", "icon": "fas fa-folder"},
     {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "fas fa-terminal"},
+    {"id": "restart", "name": "Restart", "path": "shutdown /r /t 0", "icon": "fas fa-power-off"},
+    {"id": "shutdown", "name": "Shut Down", "path": "shutdown /s /t 0", "icon": "fas fa-power-off"},
 
     # System (non-removable) tools
     {"id": "edit_shortcuts", "name": "Edit Shortcuts", "path": "system:edit", "icon": "fas fa-pencil-alt", "is_system": True},
@@ -339,7 +353,6 @@ def ensure_windows_page_exists():
 
 def rebuild_windows_pages():
     """Rebuild the Windows Applications page(s) based on current windows apps"""
-    # Remove existing Windows pages
     config_data['pages'] = [p for p in config_data['pages'] if p.get('type') != 'windows_apps']
     
     win_apps = [app for app in config_data['apps'] if app.get('is_windows_app', False)]
@@ -359,7 +372,6 @@ def rebuild_windows_pages():
             "appIds": [app["id"] for app in page_apps]
         })
     
-    # Insert Windows pages before System Tools
     sys_index = None
     for i, p in enumerate(config_data['pages']):
         if p.get('name') == SYSTEM_PAGE_NAME:
@@ -377,15 +389,15 @@ def load_config():
         print("📝 Creating new config...")
         all_apps = DEFAULT_APPS[:]
         system_apps = [a for a in all_apps if a['id'] in SYSTEM_APP_IDS]
-        normal_apps = [a for a in all_apps if a['id'] not in SYSTEM_APP_IDS and not a.get('is_windows_app', False)]
         
-        # Define pages: Social Media, Quick Settings, VLC, MS Word, OBS, then System Tools
+        # Define pages: Social Media, Quick Settings 1, Quick Settings 2, VLC, MS Word, OBS, System Tools
         page_defs = [
             {"name": "Social Media", "app_ids": ["instagram", "youtube", "facebook", "google", "twitter", "chat", "deepseek", "gemini", "claude", "grok", "whatsapp_web", "telegram_web"]},
-            {"name": "Quick Settings", "app_ids": ["volup", "voldown", "brightup", "brightdown", "mute", "unmute", "micmute", "micunmute", "bluetooth", "minimizeall", "closeall", "taskmgr", "control", "wifi", "display", "sound", "lockpc", "snipping", "notepad", "calc", "explorer", "cmd"]},
-            {"name": "VLC", "app_ids": ["vlc"]},
-            {"name": "MS Word", "app_ids": ["word"]},
-            {"name": "OBS Studio", "app_ids": ["obs"]}
+            {"name": "Quick Settings 1", "app_ids": ["volup", "voldown", "brightup", "brightdown", "mute", "unmute", "micmute", "micunmute", "bluetooth", "minimizeall", "closeall", "taskmgr"]},
+            {"name": "Quick Settings 2", "app_ids": ["control", "wifi", "display", "sound", "lockpc", "snipping", "notepad", "calc", "explorer", "cmd", "restart", "shutdown"]},
+            {"name": "VLC", "app_ids": ["vlc", "vlc_playpause", "vlc_next", "vlc_prev", "vlc_volup", "vlc_voldown", "vlc_mute", "vlc_unmute"]},
+            {"name": "MS Word", "app_ids": ["word", "word_new", "word_open", "word_print"]},
+            {"name": "OBS Studio", "app_ids": ["obs", "obs_startrec", "obs_stoprec", "obs_pause", "obs_unpause"]}
         ]
         pages = []
         for pdef in page_defs:
@@ -447,23 +459,24 @@ def load_config():
         page['appIds'] = [aid for aid in page['appIds'] if aid not in SYSTEM_APP_IDS]
     
     # Ensure the new default pages exist if not present
-    default_page_names = ["Social Media", "Quick Settings", "VLC", "MS Word", "OBS Studio"]
+    default_page_names = ["Social Media", "Quick Settings 1", "Quick Settings 2", "VLC", "MS Word", "OBS Studio"]
     existing_page_names = [p['name'] for p in other_pages]
     for name in default_page_names:
         if name not in existing_page_names:
             # Create page with corresponding app IDs
             page_id = str(uuid.uuid4())[:8]
-            app_ids_for_page = []
             if name == "Social Media":
                 app_ids_for_page = ["instagram", "youtube", "facebook", "google", "twitter", "chat", "deepseek", "gemini", "claude", "grok", "whatsapp_web", "telegram_web"]
-            elif name == "Quick Settings":
-                app_ids_for_page = ["volup", "voldown", "brightup", "brightdown", "mute", "unmute", "micmute", "micunmute", "bluetooth", "minimizeall", "closeall", "taskmgr", "control", "wifi", "display", "sound", "lockpc", "snipping", "notepad", "calc", "explorer", "cmd"]
+            elif name == "Quick Settings 1":
+                app_ids_for_page = ["volup", "voldown", "brightup", "brightdown", "mute", "unmute", "micmute", "micunmute", "bluetooth", "minimizeall", "closeall", "taskmgr"]
+            elif name == "Quick Settings 2":
+                app_ids_for_page = ["control", "wifi", "display", "sound", "lockpc", "snipping", "notepad", "calc", "explorer", "cmd", "restart", "shutdown"]
             elif name == "VLC":
-                app_ids_for_page = ["vlc"]
+                app_ids_for_page = ["vlc", "vlc_playpause", "vlc_next", "vlc_prev", "vlc_volup", "vlc_voldown", "vlc_mute", "vlc_unmute"]
             elif name == "MS Word":
-                app_ids_for_page = ["word"]
+                app_ids_for_page = ["word", "word_new", "word_open", "word_print"]
             elif name == "OBS Studio":
-                app_ids_for_page = ["obs"]
+                app_ids_for_page = ["obs", "obs_startrec", "obs_stoprec", "obs_pause", "obs_unpause"]
             # Filter only existing apps
             app_ids_for_page = [aid for aid in app_ids_for_page if aid in [a['id'] for a in data['apps']]]
             new_page = {"id": page_id, "name": name, "appIds": app_ids_for_page}
@@ -572,7 +585,7 @@ def get_apps():
 def add_or_edit_app():
     name = request.form.get('name', '').strip()
     path = request.form.get('path', '').strip()
-    icon_emoji = request.form.get('icon', 'fas fa-box')  # default Font Awesome
+    icon_emoji = request.form.get('icon', 'fas fa-box')
     edit_id = request.form.get('edit_id')
     file = request.files.get('icon_file')
     page_id = request.form.get('page_id')
@@ -583,7 +596,6 @@ def add_or_edit_app():
         name = ""
 
     if edit_id:
-        # Allow editing only non-system apps (system apps are locked)
         for app in config_data['apps']:
             if app['id'] == edit_id and app.get('is_system', False):
                 return jsonify({"status": "error", "msg": "Cannot edit system app"}), 400
@@ -609,19 +621,19 @@ def add_or_edit_app():
         target_page = None
         if page_id:
             for page in config_data['pages']:
-                if page['id'] == page_id and page.get('type') not in ['windows_apps', 'system']:
+                if page['id'] == page_id and page.get('type') not in ['windows_apps', 'system'] and page.get('name') != SYSTEM_PAGE_NAME:
                     target_page = page
                     break
         capacity = get_capacity()
         if not target_page:
             for page in config_data['pages']:
-                if page.get('type') not in ['windows_apps', 'system'] and len(page['appIds']) < capacity:
+                if page.get('type') not in ['windows_apps', 'system'] and page.get('name') != SYSTEM_PAGE_NAME and len(page['appIds']) < capacity:
                     target_page = page
                     break
         if not target_page:
             sys_index = None
             for i, p in enumerate(config_data['pages']):
-                if p.get('type') in ['windows_apps', 'system']:
+                if p.get('type') in ['windows_apps', 'system'] or p.get('name') == SYSTEM_PAGE_NAME:
                     sys_index = i
                     break
             new_page_id = str(uuid.uuid4())[:8]
@@ -637,7 +649,6 @@ def add_or_edit_app():
 
 @app.route('/api/apps/<app_id>', methods=['DELETE'])
 def delete_app(app_id):
-    # Allow deletion of any app except system apps (is_system=True)
     for app in config_data['apps']:
         if app['id'] == app_id and app.get('is_system', False):
             return jsonify({"status": "error", "msg": "Cannot delete system app"}), 400
@@ -707,7 +718,6 @@ def add_page():
 
 @app.route('/api/pages/<page_id>', methods=['DELETE'])
 def delete_page(page_id):
-    # Prevent deleting System Tools page
     for page in config_data['pages']:
         if page['id'] == page_id:
             if page.get('name') == SYSTEM_PAGE_NAME:
@@ -768,7 +778,6 @@ def move_app():
     from_index = data.get('fromIndex')
     to_index = data.get('toIndex')
     
-    # Prevent moving system apps
     for app in config_data['apps']:
         if app['id'] == app_id and app.get('is_system', False):
             return jsonify({"status": "error", "msg": "Cannot move system app"}), 400
@@ -780,7 +789,6 @@ def move_app():
                     page['appIds'].remove(app_id)
                 break
     if to_page_id is not None:
-        # Prevent moving into System Tools page
         for page in config_data['pages']:
             if page['id'] == to_page_id and page.get('name') == SYSTEM_PAGE_NAME:
                 return jsonify({"status": "error", "msg": "Cannot move app to System Tools page"}), 400
