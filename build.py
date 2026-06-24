@@ -2,6 +2,7 @@
 """
 WinLauncher Build Script
 Creates standalone .exe file using PyInstaller
+Uses static/icon-512.png as the application icon
 """
 
 import os
@@ -10,13 +11,42 @@ import shutil
 import subprocess
 from pathlib import Path
 
+def create_icon_from_png():
+    """Convert static/icon-512.png to app.ico using PIL"""
+    try:
+        from PIL import Image
+        
+        png_path = Path("static/icon-512.png")
+        ico_path = Path("app.ico")
+        
+        if not png_path.exists():
+            print("❌ static/icon-512.png not found! Please place the icon there.")
+            return False
+        
+        print(f"📐 Converting {png_path} to {ico_path}...")
+        
+        # Open the PNG and resize to common icon sizes
+        img = Image.open(png_path)
+        
+        # Windows icon requires specific sizes: 16, 32, 48, 64, 128, 256
+        sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+        
+        # Save as ICO with multiple sizes
+        img.save(ico_path, format='ICO', sizes=sizes)
+        print(f"✅ Icon created: {ico_path}")
+        return True
+    except ImportError:
+        print("❌ PIL (Pillow) is required to convert the icon.")
+        print("   Install it with: pip install Pillow")
+        return False
+    except Exception as e:
+        print(f"❌ Failed to create icon: {e}")
+        return False
+
 def build_exe():
     """Build the WinLauncher executable"""
     
-    # Get the current directory
     current_dir = Path(__file__).parent.absolute()
-    
-    # Define paths
     main_file = current_dir / "main.py"
     dist_dir = current_dir / "dist"
     build_dir = current_dir / "build"
@@ -32,13 +62,20 @@ def build_exe():
             shutil.rmtree(directory)
             print(f"   Removed {directory.name}/")
     
+    # Create icon from static PNG
+    if not create_icon_from_png():
+        print("⚠️  Icon creation failed. Proceeding without a custom icon.")
+        icon_arg = ""
+    else:
+        icon_arg = "--icon=app.ico"
+    
     # PyInstaller command
     pyinstaller_cmd = [
         "pyinstaller",
         "--onefile",
         "--windowed",
         "--name=WinLauncher",
-        "--icon=app.ico" if Path("app.ico").exists() else "",
+        icon_arg,
         "--add-data=static:static",
         "--add-data=templates:templates",
         "--hidden-import=flask_socketio",
@@ -94,50 +131,7 @@ def build_exe():
         print(f"\n❌ Build error: {e}")
         return False
 
-def create_icon():
-    """Create a simple icon if it doesn't exist"""
-    try:
-        from PIL import Image, ImageDraw
-        
-        icon_path = Path("app.ico")
-        if not icon_path.exists():
-            print("📐 Creating app icon...")
-            
-            # Create a simple icon
-            img = Image.new('RGB', (256, 256), color='#1a1a1a')
-            draw = ImageDraw.Draw(img)
-            
-            # Draw a simple launcher icon (rocket emoji style)
-            # Draw circle background
-            draw.ellipse([20, 20, 236, 236], fill='#2a5f9e', outline='#1e3a5f', width=2)
-            
-            # Draw rocket shape (simplified)
-            draw.polygon([128, 40, 160, 120, 128, 110, 96, 120], fill='#ff6b6b')
-            
-            # Draw rocket body
-            draw.rectangle([110, 100, 146, 200], fill='#f5f5f5')
-            
-            # Draw flame
-            draw.polygon([110, 200, 128, 230, 146, 200], fill='#ffaa00')
-            
-            # Save as ico
-            img.save('app.ico')
-            print("✅ Icon created: app.ico")
-            return True
-    except ImportError:
-        print("⚠️  PIL not available for icon creation")
-        return False
-    except Exception as e:
-        print(f"⚠️  Could not create icon: {e}")
-        return False
-
 if __name__ == "__main__":
     print("\n🚀 WinLauncher Build System\n")
-    
-    # Try to create an icon
-    create_icon()
-    
-    # Build the executable
     success = build_exe()
-    
     sys.exit(0 if success else 1)
