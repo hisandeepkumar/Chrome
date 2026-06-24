@@ -8,6 +8,7 @@ import uuid
 import re
 import base64
 import ctypes
+import winreg
 from ctypes import wintypes
 from flask import Flask, request, render_template, jsonify, send_from_directory
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget
@@ -18,93 +19,195 @@ from io import BytesIO
 from zeroconf import ServiceInfo, Zeroconf
 from PIL import Image, ImageDraw, ImageFont
 
-# ---------- Windows Shortcut Parser (ctypes, no pywin32) ----------
-# Structure for SHFILEINFOW
-class SHFILEINFOW(ctypes.Structure):
-    _fields_ = [
-        ("hIcon", wintypes.HANDLE),
-        ("iIcon", ctypes.c_int),
-        ("dwAttributes", wintypes.DWORD),
-        ("szDisplayName", wintypes.WCHAR * 260),
-        ("szTypeName", wintypes.WCHAR * 80),
+print("\n" + "="*70)
+print("🚀 WINLAUNCHER - Starting with ENHANCED Windows App Detection")
+print("="*70 + "\n")
+
+# ---------- Windows App Detection - MULTIPLE METHODS ----------
+
+def get_installed_programs_from_registry():
+    """Get installed programs from Windows Registry (MOST RELIABLE)"""
+    programs = []
+    print("📚 Method 1: Reading from Windows Registry...")
+    
+    reg_paths = [
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
     ]
+    
+    count = 0
+    for hkey, path in reg_paths:
+        try:
+            with winreg.OpenKey(hkey, path) as key:
+                i = 0
+                while True:
+                    try:
+                        subkey_name = winreg.EnumKey(key, i)
+                        with winreg.OpenKey(hkey, path + "\\" + subkey_name) as subkey:
+                            try:
+                                display_name = winreg.QueryValueEx(subkey, "DisplayName")[0]
+                                try:
+                                    install_location = winreg.QueryValueEx(subkey, "InstallLocation")[0]
+                                except:
+                                    install_location = ""
+                                
+                                # Look for executable
+                                if install_location and os.path.exists(install_location):
+                                    # Find main exe
+                                    exe_path = None
+                                    app_name = display_name.split()[0]  # First word
+                                    
+                                    # Common exe names
+                                    for exe_name in [app_name.lower(), "application.exe", app_name.lower() + ".exe"]:
+                                        potential_path = os.path.join(install_location, exe_name)
+                                        if os.path.exists(potential_path) and potential_path.lower().endswith('.exe'):
+                                            exe_path = potential_path
+                                            break
+                                    
+                                    # Search in folder
+                                    if not exe_path:
+                                        for file in os.listdir(install_location):
+                                            if file.lower().endswith('.exe'):
+                                                exe_path = os.path.join(install_location, file)
+                                                break
+                                    
+                                    if exe_path and os.path.exists(exe_path):
+                                        app_id = f"winapp_{hash(exe_path) & 0xFFFFFFFF:08x}"
+                                        programs.append({
+                                            "id": app_id,
+                                            "name": display_name,
+                                            "path": exe_path,
+                                            "icon": "fas fa-windows",  # Font Awesome icon
+                                            "is_windows_app": True,
+                                            "is_system": False
+                                        })
+                                        count += 1
+                                        if count <= 5:  # Show first 5
+                                            print(f"   ✅ Found: {display_name}")
+                            except:
+                                pass
+                        i += 1
+                    except WindowsError:
+                        break
+        except Exception as e:
+            print(f"   ⚠️ Registry path error: {str(e)[:50]}")
+            pass
+    
+    print(f"   📊 Registry method found: {count} programs\n")
+    return programs
 
-def get_lnk_target(lnk_path):
-    """Read the target of a .lnk file using shell32 (works without pywin32)."""
-    try:
-        shell32 = ctypes.windll.shell32
-        ole32 = ctypes.windll.ole32
-        # CLSID_ShellLink = {00021401-0000-0000-C000-000000000046}
-        CLSID_ShellLink = ctypes.create_guid("{00021401-0000-0000-C000-000000000046}")
-        # IID_IShellLinkW = {000214F9-0000-0000-C000-000000000046}
-        IID_IShellLinkW = ctypes.create_guid("{000214F9-0000-0000-C000-000000000046}")
-        
-        ole32.CoInitialize(None)
-        ppsl = ctypes.POINTER(ctypes.c_void_p)()
-        hr = ole32.CoCreateInstance(ctypes.byref(CLSID_ShellLink), None, 1, ctypes.byref(IID_IShellLinkW), ctypes.byref(ppsl))
-        if hr != 0:
-            return None
-        ppf = ctypes.POINTER(ctypes.c_void_p)()
-        IID_IPersistFile = ctypes.create_guid("{0000010B-0000-0000-C000-000000000046}")
-        hr = ppsl[0].QueryInterface(ctypes.byref(IID_IPersistFile), ctypes.byref(ppf))
-        if hr != 0:
-            return None
-        hr = ppf[0].Load(lnk_path, 0)
-        if hr != 0:
-            return None
-        target = ctypes.create_unicode_buffer(260)
-        ppsl[0].GetPath(target, 260, None, 0)
-        return target.value
-    except Exception as e:
-        print(f"⚠️ Error reading .lnk file {lnk_path}: {str(e)}")
-        return None
 
-def get_installed_windows_apps():
-    """Scan Start Menu folders for .lnk shortcuts and extract targets."""
+def get_installed_windows_apps_from_shortcuts():
+    """Fallback: Get apps from Start Menu shortcuts (.lnk files)"""
     apps = []
-    # Common Start Menu folders in Windows 10/11
+    print("📂 Method 2: Scanning Start Menu Shortcuts...")
+    
     folders = [
         os.path.expandvars("%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs"),
         os.path.expandvars("%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs"),
-        os.path.expandvars("%ALLUSERSPROFILE%\\Microsoft\\Windows\\Start Menu\\Programs")
     ]
+    
     seen = set()
+    total_scanned = 0
+    
     for folder in folders:
         if not os.path.exists(folder):
-            print(f"ℹ️ Folder not found: {folder}")
+            print(f"   ⊘ Folder not found: {folder}")
             continue
+        
+        print(f"   ✅ Scanning: {folder}")
         try:
             for root, dirs, files in os.walk(folder):
                 for file in files:
                     if file.lower().endswith('.lnk'):
+                        total_scanned += 1
                         lnk_path = os.path.join(root, file)
+                        
+                        # Try to extract target path from .lnk binary
                         try:
-                            target = get_lnk_target(lnk_path)
-                            if target and target.lower().endswith('.exe') and target not in seen:
-                                # Verify file actually exists
-                                if os.path.exists(target):
-                                    seen.add(target)
-                                    name = os.path.splitext(file)[0]
-                                    name = name.replace(' - Shortcut', '').strip()
-                                    # Create stable ID
-                                    app_id = f"winapp_{hash(target) & 0xFFFFFFFF:08x}"
-                                    apps.append({
-                                        "id": app_id,
-                                        "name": name,
-                                        "path": target,
-                                        "icon": "🖥️",
-                                        "is_windows_app": True,
-                                        "is_system": True
-                                    })
-                        except Exception as e:
-                            print(f"⚠️ Error processing {lnk_path}: {str(e)}")
-                            continue
+                            with open(lnk_path, 'rb') as f:
+                                data = f.read()
+                            
+                            # Extract strings from binary
+                            strings = []
+                            current = b''
+                            for byte in data:
+                                if 32 <= byte <= 126:
+                                    current += bytes([byte])
+                                else:
+                                    if len(current) > 5:
+                                        strings.append(current.decode('utf-8', errors='ignore'))
+                                    current = b''
+                            
+                            # Find .exe path
+                            for s in strings:
+                                if '.exe' in s.lower() and len(s) > 10:
+                                    if os.path.exists(s):
+                                        if s not in seen:
+                                            seen.add(s)
+                                            name = os.path.splitext(file)[0].replace(' - Shortcut', '').strip()
+                                            app_id = f"winapp_{hash(s) & 0xFFFFFFFF:08x}"
+                                            apps.append({
+                                                "id": app_id,
+                                                "name": name,
+                                                "path": s,
+                                                "icon": "fas fa-windows",
+                                                "is_windows_app": True,
+                                                "is_system": False
+                                            })
+                                            print(f"   ✅ From shortcut: {name}")
+                                            break
+                        except:
+                            pass
         except Exception as e:
-            print(f"⚠️ Error scanning folder {folder}: {str(e)}")
-            continue
+            print(f"   ⚠️ Error scanning folder: {str(e)[:50]}")
     
-    print(f"✅ Found {len(apps)} Windows apps")
+    print(f"   📊 Shortcut method found: {len(apps)} apps (scanned {total_scanned} .lnk files)\n")
     return apps
+
+
+def get_installed_windows_apps():
+    """Combined method - tries Registry first, then shortcuts"""
+    print("\n" + "="*70)
+    print("🔍 DETECTING WINDOWS APPLICATIONS...")
+    print("="*70 + "\n")
+    
+    all_apps = []
+    seen_ids = set()
+    
+    # Try registry first (most reliable)
+    try:
+        registry_apps = get_installed_programs_from_registry()
+        for app in registry_apps:
+            if app['id'] not in seen_ids:
+                all_apps.append(app)
+                seen_ids.add(app['id'])
+    except Exception as e:
+        print(f"⚠️ Registry method failed: {str(e)[:50]}\n")
+    
+    # Try shortcuts as fallback
+    try:
+        shortcut_apps = get_installed_windows_apps_from_shortcuts()
+        for app in shortcut_apps:
+            if app['id'] not in seen_ids:
+                all_apps.append(app)
+                seen_ids.add(app['id'])
+    except Exception as e:
+        print(f"⚠️ Shortcut method failed: {str(e)[:50]}\n")
+    
+    print("="*70)
+    if len(all_apps) > 0:
+        print(f"✅ DETECTION COMPLETE: Found {len(all_apps)} Windows applications!")
+    else:
+        print("⚠️ No Windows applications detected!")
+        print("   • Registry may be restricted")
+        print("   • Start Menu may be empty")
+        print("   • Try manually adding apps via UI")
+    print("="*70 + "\n")
+    
+    return all_apps
+
 
 # ---------- User Data Directory ----------
 APPDATA = os.path.expandvars('%APPDATA%')
@@ -142,33 +245,55 @@ WINDOWS_APPS_PAGE_NAME = "Windows Applications"
 
 # ---------- Default Apps ----------
 DEFAULT_APPS = [
-    {"id": "whatsapp", "name": "WhatsApp", "path": "https://web.whatsapp.com", "icon": "💬"},
-    {"id": "youtube", "name": "YouTube", "path": "https://youtube.com", "icon": "▶️"},
-    {"id": "deepseek", "name": "DeepSeek", "path": "https://chat.deepseek.com", "icon": "🤖"},
-    {"id": "chatgpt", "name": "ChatGPT", "path": "https://chatgpt.com", "icon": "✨"},
-    {"id": "gmail", "name": "Gmail", "path": "https://gmail.com", "icon": "📧"},
-    {"id": "newtab", "name": "New Tab", "path": "about:blank", "icon": "➕"},
-    {"id": "wifi", "name": "WiFi", "path": "ms-settings:network-wifi", "icon": "📶"},
-    {"id": "bluetooth", "name": "Bluetooth", "path": "ms-settings:bluetooth", "icon": "📳"},
-    {"id": "display", "name": "Display", "path": "ms-settings:display", "icon": "🖥️"},
-    {"id": "sound", "name": "Sound", "path": "ms-settings:sound", "icon": "🔊"},
-    {"id": "volup", "name": "Volume +", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]175)", "icon": "🔊+"},
-    {"id": "voldown", "name": "Volume -", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]174)", "icon": "🔊-"},
-    {"id": "brightup", "name": "Brightness +", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,100)", "icon": "☀️+"},
-    {"id": "brightdown", "name": "Brightness -", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,50)", "icon": "☀️-"},
-    {"id": "lockpc", "name": "Lock PC", "path": "rundll32.exe user32.dll,LockWorkStation", "icon": "🔒"},
-    {"id": "taskmgr", "name": "Task Manager", "path": "taskmgr.exe", "icon": "⚙️"},
-    {"id": "snipping", "name": "Snipping Tool", "path": "SnippingTool.exe", "icon": "✂️"},
-    {"id": "control", "name": "Control Panel", "path": "control.exe", "icon": "📟"},
-    {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "📝"},
-    {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "🧮"},
-    {"id": "explorer", "name": "Explorer", "path": "explorer.exe", "icon": "📁"},
-    {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "⌨️"},
-    {"id": "closeall", "name": "Close Browsers", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "❌"},
-    # System tools
-    {"id": "edit_shortcuts", "name": "Edit Shortcuts", "path": "system:edit", "icon": "✏️", "is_system": True},
-    {"id": "grid_settings", "name": "Grid Settings", "path": "system:settings", "icon": "⚙️", "is_system": True},
-    {"id": "restore_windows_apps", "name": "Restore Windows Apps", "path": "system:restore_windows", "icon": "🔄", "is_system": True}
+    # Social Media Apps
+    {"id": "instagram", "name": "Instagram", "path": "https://instagram.com", "icon": "fab fa-instagram"},
+    {"id": "youtube", "name": "YouTube", "path": "https://youtube.com", "icon": "fab fa-youtube"},
+    {"id": "facebook", "name": "Facebook", "path": "https://facebook.com", "icon": "fab fa-facebook"},
+    {"id": "google", "name": "Google", "path": "https://google.com", "icon": "fab fa-google"},
+    {"id": "twitter", "name": "Twitter", "path": "https://twitter.com", "icon": "fab fa-twitter"},
+    {"id": "chat", "name": "Chat", "path": "https://chat.openai.com", "icon": "fas fa-comment-dots"},  # or any chat
+    {"id": "deepseek", "name": "DeepSeek", "path": "https://chat.deepseek.com", "icon": "fas fa-robot"},
+    {"id": "gemini", "name": "Gemini", "path": "https://gemini.google.com", "icon": "fas fa-brain"},
+    {"id": "claude", "name": "Claude", "path": "https://claude.ai", "icon": "fas fa-hand-sparkles"},
+    {"id": "grok", "name": "Grok", "path": "https://grok.x.ai", "icon": "fas fa-arrow-trend-up"},
+    {"id": "whatsapp_web", "name": "Web WhatsApp", "path": "https://web.whatsapp.com", "icon": "fab fa-whatsapp"},
+    {"id": "telegram_web", "name": "Web Telegram", "path": "https://web.telegram.org", "icon": "fab fa-telegram-plane"},
+
+    # VLC, MS Word, OBS Studio
+    {"id": "vlc", "name": "VLC", "path": "vlc.exe", "icon": "fas fa-play-circle"},
+    {"id": "word", "name": "MS Word", "path": "WINWORD.EXE", "icon": "fas fa-file-word"},
+    {"id": "obs", "name": "OBS Studio", "path": "obs64.exe", "icon": "fas fa-video"},
+
+    # Quick Settings Apps
+    {"id": "volup", "name": "Volume +", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]175)", "icon": "fas fa-volume-up"},
+    {"id": "voldown", "name": "Volume -", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]174)", "icon": "fas fa-volume-down"},
+    {"id": "brightup", "name": "Brightness +", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,100)", "icon": "fas fa-sun"},
+    {"id": "brightdown", "name": "Brightness -", "path": "powershell -c (Get-WmiObject -Class WmiMonitorBrightnessMethods -Namespace root\\wmi).WmiSetBrightness(1,50)", "icon": "fas fa-sun"},
+    {"id": "mute", "name": "Mute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-volume-mute"},
+    {"id": "unmute", "name": "Unmute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-volume-up"},  # Toggle
+    {"id": "micmute", "name": "Mic Mute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-microphone-slash"},  # Might need actual toggle
+    {"id": "micunmute", "name": "Mic Unmute", "path": "powershell -c (New-Object -ComObject WScript.Shell).SendKeys([char]173)", "icon": "fas fa-microphone"},
+    {"id": "bluetooth", "name": "Add Bluetooth", "path": "ms-settings:bluetooth", "icon": "fab fa-bluetooth-b"},
+    {"id": "minimizeall", "name": "Minimize All", "path": "powershell -c (New-Object -ComObject shell.application).MinimizeAll()", "icon": "fas fa-window-minimize"},
+    {"id": "closeall", "name": "Close All Apps", "path": "taskkill /IM chrome.exe /F & taskkill /IM msedge.exe /F & taskkill /IM firefox.exe /F", "icon": "fas fa-times-circle"},
+    {"id": "taskmgr", "name": "Task Manager", "path": "taskmgr.exe", "icon": "fas fa-tasks"},
+    {"id": "control", "name": "Control Center", "path": "control.exe", "icon": "fas fa-cogs"},
+
+    # Additional system tools (existing)
+    {"id": "wifi", "name": "WiFi", "path": "ms-settings:network-wifi", "icon": "fas fa-wifi"},
+    {"id": "display", "name": "Display", "path": "ms-settings:display", "icon": "fas fa-desktop"},
+    {"id": "sound", "name": "Sound", "path": "ms-settings:sound", "icon": "fas fa-volume-up"},
+    {"id": "lockpc", "name": "Lock PC", "path": "rundll32.exe user32.dll,LockWorkStation", "icon": "fas fa-lock"},
+    {"id": "snipping", "name": "Snipping Tool", "path": "SnippingTool.exe", "icon": "fas fa-scissors"},
+    {"id": "notepad", "name": "Notepad", "path": "notepad.exe", "icon": "fas fa-edit"},
+    {"id": "calc", "name": "Calculator", "path": "calc.exe", "icon": "fas fa-calculator"},
+    {"id": "explorer", "name": "Explorer", "path": "explorer.exe", "icon": "fas fa-folder"},
+    {"id": "cmd", "name": "Command Prompt", "path": "cmd.exe", "icon": "fas fa-terminal"},
+
+    # System (non-removable) tools
+    {"id": "edit_shortcuts", "name": "Edit Shortcuts", "path": "system:edit", "icon": "fas fa-pencil-alt", "is_system": True},
+    {"id": "grid_settings", "name": "Grid Settings", "path": "system:settings", "icon": "fas fa-cog", "is_system": True},
+    {"id": "restore_windows_apps", "name": "Restore Windows Apps", "path": "system:restore_windows", "icon": "fas fa-sync-alt", "is_system": True}
 ]
 
 DEFAULT_SETTINGS = {
@@ -184,45 +309,37 @@ DEFAULT_SETTINGS = {
 }
 
 def get_capacity():
-    return DEFAULT_SETTINGS["grid"]["cols"] * DEFAULT_SETTINGS["grid"]["rows"]  # 12
+    return DEFAULT_SETTINGS["grid"]["cols"] * DEFAULT_SETTINGS["grid"]["rows"]
 
 # ---------- Windows Apps Refresh Logic ----------
 def refresh_windows_apps():
-    """Re-scan for new Windows apps and add them to config, but keep user deletions."""
+    """Re-scan for new Windows apps and add them to config"""
     global config_data
     installed = get_installed_windows_apps()
     installed_ids = {app['id'] for app in installed}
-    
-    # Get existing windows apps from config (including user-deleted ones will be missing)
     existing_windows_ids = {app['id'] for app in config_data['apps'] if app.get('is_windows_app', False)}
     
-    # Find new apps that are installed but not in config
-    new_apps = []
-    for app in installed:
-        if app['id'] not in existing_windows_ids:
-            new_apps.append(app)
+    new_apps = [app for app in installed if app['id'] not in existing_windows_ids]
     
     if not new_apps:
-        # No new apps, but ensure windows page exists
         ensure_windows_page_exists()
         return len(new_apps)
     
-    # Add new apps to config
     config_data['apps'].extend(new_apps)
     rebuild_windows_pages()
     save_config(config_data)
     return len(new_apps)
 
 def ensure_windows_page_exists():
-    """Create Windows Applications page(s) if none exist."""
+    """Create Windows Applications page if none exist"""
     has_windows_page = any(p.get('type') == 'windows_apps' for p in config_data['pages'])
     if has_windows_page:
         return
     rebuild_windows_pages()
 
 def rebuild_windows_pages():
-    """Rebuild the Windows Applications page(s) based on current windows apps in config."""
-    # Remove existing windows pages
+    """Rebuild the Windows Applications page(s) based on current windows apps"""
+    # Remove existing Windows pages
     config_data['pages'] = [p for p in config_data['pages'] if p.get('type') != 'windows_apps']
     
     win_apps = [app for app in config_data['apps'] if app.get('is_windows_app', False)]
@@ -242,7 +359,7 @@ def rebuild_windows_pages():
             "appIds": [app["id"] for app in page_apps]
         })
     
-    # Insert before system page
+    # Insert Windows pages before System Tools
     sys_index = None
     for i, p in enumerate(config_data['pages']):
         if p.get('name') == SYSTEM_PAGE_NAME:
@@ -260,23 +377,32 @@ def load_config():
         print("📝 Creating new config...")
         all_apps = DEFAULT_APPS[:]
         system_apps = [a for a in all_apps if a['id'] in SYSTEM_APP_IDS]
-        normal_apps = [a for a in all_apps if a['id'] not in SYSTEM_APP_IDS]
+        normal_apps = [a for a in all_apps if a['id'] not in SYSTEM_APP_IDS and not a.get('is_windows_app', False)]
+        
+        # Define pages: Social Media, Quick Settings, VLC, MS Word, OBS, then System Tools
+        page_defs = [
+            {"name": "Social Media", "app_ids": ["instagram", "youtube", "facebook", "google", "twitter", "chat", "deepseek", "gemini", "claude", "grok", "whatsapp_web", "telegram_web"]},
+            {"name": "Quick Settings", "app_ids": ["volup", "voldown", "brightup", "brightdown", "mute", "unmute", "micmute", "micunmute", "bluetooth", "minimizeall", "closeall", "taskmgr", "control", "wifi", "display", "sound", "lockpc", "snipping", "notepad", "calc", "explorer", "cmd"]},
+            {"name": "VLC", "app_ids": ["vlc"]},
+            {"name": "MS Word", "app_ids": ["word"]},
+            {"name": "OBS Studio", "app_ids": ["obs"]}
+        ]
         pages = []
-        capacity = get_capacity()
-        for i in range(0, len(normal_apps), capacity):
-            page_apps = normal_apps[i:i+capacity]
+        for pdef in page_defs:
             page_id = str(uuid.uuid4())[:8]
             pages.append({
                 "id": page_id,
-                "name": f"Page {len(pages)+1}",
-                "appIds": [app["id"] for app in page_apps]
+                "name": pdef["name"],
+                "appIds": [aid for aid in pdef["app_ids"] if aid in [a["id"] for a in all_apps]]
             })
+        # System Tools page
         sys_page_id = str(uuid.uuid4())[:8]
         pages.append({
             "id": sys_page_id,
             "name": SYSTEM_PAGE_NAME,
             "appIds": [a["id"] for a in system_apps]
         })
+        
         data = {
             "apps": all_apps,
             "pages": pages,
@@ -284,19 +410,19 @@ def load_config():
         }
         with open(CONFIG_FILE, 'w') as f:
             json.dump(data, f, indent=4)
-        print("✅ Config created")
+        print("✅ Config created\n")
         return data
     
     with open(CONFIG_FILE, 'r') as f:
         data = json.load(f)
     
-    # Ensure all default apps are present
+    # Ensure all default apps exist
     existing_ids = {app['id'] for app in data.get('apps', [])}
     for default_app in DEFAULT_APPS:
         if default_app['id'] not in existing_ids:
             data['apps'].append(default_app)
     
-    # Ensure system page exists and is last
+    # Ensure System Tools page exists and is last
     system_page = None
     other_pages = []
     for page in data.get('pages', []):
@@ -310,35 +436,53 @@ def load_config():
         system_page = {"id": sys_page_id, "name": SYSTEM_PAGE_NAME, "appIds": []}
         other_pages.append(system_page)
     
-    # Ensure system page has only system apps
+    # Ensure system apps are in system page
     system_page['appIds'] = [aid for aid in system_page['appIds'] if aid in SYSTEM_APP_IDS]
     for aid in SYSTEM_APP_IDS:
         if aid not in system_page['appIds']:
             system_page['appIds'].append(aid)
+    
+    # Remove system apps from other pages
     for page in other_pages:
         page['appIds'] = [aid for aid in page['appIds'] if aid not in SYSTEM_APP_IDS]
     
-    # Rebuild normal pages with capacity
-    all_normal_app_ids = [app['id'] for app in data['apps'] if app['id'] not in SYSTEM_APP_IDS and not app.get('is_windows_app', False)]
-    capacity = get_capacity()
-    new_pages = []
-    for idx, app_id in enumerate(all_normal_app_ids):
-        if idx % capacity == 0:
+    # Ensure the new default pages exist if not present
+    default_page_names = ["Social Media", "Quick Settings", "VLC", "MS Word", "OBS Studio"]
+    existing_page_names = [p['name'] for p in other_pages]
+    for name in default_page_names:
+        if name not in existing_page_names:
+            # Create page with corresponding app IDs
             page_id = str(uuid.uuid4())[:8]
-            new_pages.append({
-                "id": page_id,
-                "name": f"Page {len(new_pages)+1}",
-                "appIds": []
-            })
-        new_pages[-1]['appIds'].append(app_id)
-    if not new_pages:
-        page_id = str(uuid.uuid4())[:8]
-        new_pages.append({"id": page_id, "name": "Page 1", "appIds": []})
+            app_ids_for_page = []
+            if name == "Social Media":
+                app_ids_for_page = ["instagram", "youtube", "facebook", "google", "twitter", "chat", "deepseek", "gemini", "claude", "grok", "whatsapp_web", "telegram_web"]
+            elif name == "Quick Settings":
+                app_ids_for_page = ["volup", "voldown", "brightup", "brightdown", "mute", "unmute", "micmute", "micunmute", "bluetooth", "minimizeall", "closeall", "taskmgr", "control", "wifi", "display", "sound", "lockpc", "snipping", "notepad", "calc", "explorer", "cmd"]
+            elif name == "VLC":
+                app_ids_for_page = ["vlc"]
+            elif name == "MS Word":
+                app_ids_for_page = ["word"]
+            elif name == "OBS Studio":
+                app_ids_for_page = ["obs"]
+            # Filter only existing apps
+            app_ids_for_page = [aid for aid in app_ids_for_page if aid in [a['id'] for a in data['apps']]]
+            new_page = {"id": page_id, "name": name, "appIds": app_ids_for_page}
+            # Insert before System Tools
+            sys_idx = None
+            for i, p in enumerate(other_pages):
+                if p.get('name') == SYSTEM_PAGE_NAME:
+                    sys_idx = i
+                    break
+            if sys_idx is not None:
+                other_pages.insert(sys_idx, new_page)
+            else:
+                other_pages.append(new_page)
     
-    # Handle windows apps
-    data['pages'] = [p for p in data['pages'] if p.get('type') != 'windows_apps']
+    # Now rebuild pages: remove Windows pages and regenerate based on current windows apps
+    data['pages'] = [p for p in other_pages if p.get('type') != 'windows_apps']
     win_apps = [app for app in data['apps'] if app.get('is_windows_app', False)]
     if win_apps:
+        capacity = get_capacity()
         win_page_apps = []
         for i in range(0, len(win_apps), capacity):
             page_apps = win_apps[i:i+capacity]
@@ -350,19 +494,23 @@ def load_config():
                 "type": "windows_apps",
                 "appIds": [app["id"] for app in page_apps]
             })
-        sys_index = None
-        for i, p in enumerate(new_pages):
+        # Insert Windows pages before System Tools
+        sys_idx = None
+        for i, p in enumerate(data['pages']):
             if p.get('name') == SYSTEM_PAGE_NAME:
-                sys_index = i
+                sys_idx = i
                 break
-        if sys_index is not None:
-            new_pages[sys_index:sys_index] = win_page_apps
+        if sys_idx is not None:
+            data['pages'][sys_idx:sys_idx] = win_page_apps
         else:
-            new_pages.extend(win_page_apps)
+            data['pages'].extend(win_page_apps)
     
-    # Add system page at the end
-    new_pages.append(system_page)
-    data['pages'] = new_pages
+    # Ensure System Tools is last
+    if system_page not in data['pages']:
+        data['pages'].append(system_page)
+    else:
+        data['pages'].remove(system_page)
+        data['pages'].append(system_page)
     
     if 'settings' not in data:
         data['settings'] = DEFAULT_SETTINGS
@@ -378,26 +526,25 @@ def save_config(data):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
 
-# Load config once at startup
-print("🚀 Loading configuration...")
+# Load config and detect Windows apps
+print("📥 Loading configuration...")
 config_data = load_config()
 
-# AUTO-DETECT WINDOWS APPS ON STARTUP ✅ FIX
-print("🔍 Scanning for Windows apps on startup...")
+print("🔄 Scanning for Windows applications...")
 initial_windows_apps = get_installed_windows_apps()
 if initial_windows_apps:
     existing_windows_ids = {app['id'] for app in config_data['apps'] if app.get('is_windows_app', False)}
     new_apps = [app for app in initial_windows_apps if app['id'] not in existing_windows_ids]
     if new_apps:
-        print(f"➕ Adding {len(new_apps)} new Windows apps to config...")
+        print(f"✨ Adding {len(new_apps)} new Windows applications to config...")
         config_data['apps'].extend(new_apps)
         rebuild_windows_pages()
         save_config(config_data)
-        print("✅ Windows apps added successfully!")
+        print(f"✅ Successfully added {len(new_apps)} Windows apps!\n")
     else:
-        print("ℹ️ No new Windows apps found")
+        print("ℹ️ No new Windows apps to add\n")
 else:
-    print("ℹ️ No Windows apps detected")
+    print("⚠️ No Windows apps detected\n")
 
 # ---------- Flask Routes ----------
 @app.route('/')
@@ -425,7 +572,7 @@ def get_apps():
 def add_or_edit_app():
     name = request.form.get('name', '').strip()
     path = request.form.get('path', '').strip()
-    icon_emoji = request.form.get('icon', '📦')
+    icon_emoji = request.form.get('icon', 'fas fa-box')  # default Font Awesome
     edit_id = request.form.get('edit_id')
     file = request.files.get('icon_file')
     page_id = request.form.get('page_id')
@@ -436,9 +583,10 @@ def add_or_edit_app():
         name = ""
 
     if edit_id:
+        # Allow editing only non-system apps (system apps are locked)
         for app in config_data['apps']:
-            if app['id'] == edit_id and app.get('is_windows_app', False):
-                return jsonify({"status": "error", "msg": "Cannot edit Windows app"}), 400
+            if app['id'] == edit_id and app.get('is_system', False):
+                return jsonify({"status": "error", "msg": "Cannot edit system app"}), 400
 
     if edit_id:
         for app in config_data['apps']:
@@ -489,8 +637,10 @@ def add_or_edit_app():
 
 @app.route('/api/apps/<app_id>', methods=['DELETE'])
 def delete_app(app_id):
-    if app_id in SYSTEM_APP_IDS:
-        return jsonify({"status": "error", "msg": "Cannot delete system app"}), 400
+    # Allow deletion of any app except system apps (is_system=True)
+    for app in config_data['apps']:
+        if app['id'] == app_id and app.get('is_system', False):
+            return jsonify({"status": "error", "msg": "Cannot delete system app"}), 400
     config_data['apps'] = [a for a in config_data['apps'] if a['id'] != app_id]
     icon_path = os.path.join(ICON_DIR, f'{app_id}.png')
     if os.path.exists(icon_path):
@@ -543,7 +693,7 @@ def add_page():
         return jsonify({"status": "error", "msg": "Reserved page name"}), 400
     sys_index = None
     for i, p in enumerate(config_data['pages']):
-        if p.get('type') in ['windows_apps', 'system']:
+        if p.get('type') in ['windows_apps', 'system'] or p.get('name') == SYSTEM_PAGE_NAME:
             sys_index = i
             break
     page_id = str(uuid.uuid4())[:8]
@@ -557,10 +707,11 @@ def add_page():
 
 @app.route('/api/pages/<page_id>', methods=['DELETE'])
 def delete_page(page_id):
+    # Prevent deleting System Tools page
     for page in config_data['pages']:
         if page['id'] == page_id:
-            if page.get('type') == 'system':
-                return jsonify({"status": "error", "msg": "Cannot delete system page"}), 400
+            if page.get('name') == SYSTEM_PAGE_NAME:
+                return jsonify({"status": "error", "msg": "Cannot delete System Tools page"}), 400
             break
     config_data['pages'] = [p for p in config_data['pages'] if p['id'] != page_id]
     save_config(config_data)
@@ -571,8 +722,8 @@ def rename_page(page_id):
     new_name = request.json.get('name')
     for page in config_data['pages']:
         if page['id'] == page_id:
-            if page.get('type') in ['windows_apps', 'system']:
-                return jsonify({"status": "error", "msg": "Cannot rename special page"}), 400
+            if page.get('name') == SYSTEM_PAGE_NAME:
+                return jsonify({"status": "error", "msg": "Cannot rename System Tools page"}), 400
             page['name'] = new_name
             save_config(config_data)
             return jsonify({"status": "renamed"})
@@ -589,7 +740,7 @@ def reorder_pages():
         p = page_map.get(pid)
         if not p:
             continue
-        if p.get('type') == 'system':
+        if p.get('name') == SYSTEM_PAGE_NAME:
             system_pages.append(p)
         elif p.get('type') == 'windows_apps':
             windows_pages.append(p)
@@ -597,7 +748,7 @@ def reorder_pages():
             normal_pages.append(p)
     for p in config_data['pages']:
         if p not in normal_pages and p not in windows_pages and p not in system_pages:
-            if p.get('type') == 'system':
+            if p.get('name') == SYSTEM_PAGE_NAME:
                 system_pages.append(p)
             elif p.get('type') == 'windows_apps':
                 windows_pages.append(p)
@@ -617,9 +768,10 @@ def move_app():
     from_index = data.get('fromIndex')
     to_index = data.get('toIndex')
     
+    # Prevent moving system apps
     for app in config_data['apps']:
-        if app['id'] == app_id and app.get('is_windows_app'):
-            return jsonify({"status": "error", "msg": "Cannot move Windows app"}), 400
+        if app['id'] == app_id and app.get('is_system', False):
+            return jsonify({"status": "error", "msg": "Cannot move system app"}), 400
     
     if from_page_id:
         for page in config_data['pages']:
@@ -628,9 +780,10 @@ def move_app():
                     page['appIds'].remove(app_id)
                 break
     if to_page_id is not None:
+        # Prevent moving into System Tools page
         for page in config_data['pages']:
-            if page['id'] == to_page_id and page.get('type') in ['windows_apps', 'system']:
-                return jsonify({"status": "error", "msg": "Cannot move to special page"}), 400
+            if page['id'] == to_page_id and page.get('name') == SYSTEM_PAGE_NAME:
+                return jsonify({"status": "error", "msg": "Cannot move app to System Tools page"}), 400
         for page in config_data['pages']:
             if page['id'] == to_page_id:
                 if to_index is not None:
@@ -704,7 +857,7 @@ def register_mdns():
         server="winlauncher.local.",
     )
     zeroconf.register_service(info)
-    print(f"✅ mDNS: http://winlauncher.local:{PORT}")
+    print(f"\n✅ mDNS: http://winlauncher.local:{PORT}\n")
     return zeroconf
 
 # ---------- PyQt QR Window ----------
@@ -762,6 +915,9 @@ def run_flask():
     app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
 
 if __name__ == '__main__':
+    print("="*70)
+    print("🚀 STARTING FLASK SERVER AND UI")
+    print("="*70)
     threading.Thread(target=run_flask, daemon=True).start()
     zeroconf = register_mdns()
 
